@@ -54,6 +54,16 @@ jobs:
           mv common "$RUNNER_TEMP/aosp-common"
           mv vendor-common common
 
+      - name: 诊断构建跳过缺失的 Vivo RSC
+        working-directory: ${{ github.workspace }}/kernel/common
+        run: |
+          set -euo pipefail
+          if [ ! -f kernel/vivo_rsc/Kconfig ]; then
+            echo "::warning::Vivo RSC source absent. Diagnostic Image only. Vendor ABI is not restored."
+            grep -Fx 'source "kernel/vivo_rsc/Kconfig"' Kconfig
+            sed -i '/^source "kernel\/vivo_rsc\/Kconfig"$/d' Kconfig
+          fi
+
       - name: 关掉 WERROR（-Warray-bounds 会误伤，且不影响 ABI）
         run: |
           set -euo pipefail
@@ -71,7 +81,7 @@ jobs:
           ok=0
           for i in 1 2 3 4; do
             echo "===== Bazel 构建 第 $i 次 ====="
-            if tools/bazel build --config=fast --notrim --disk_cache=/home/runner/.cache/bazel \
+            if tools/bazel build --verbose_failures --config=fast --notrim --disk_cache=/home/runner/.cache/bazel \
                  //common:kernel_aarch64/Image > /tmp/bazel.log 2>&1; then
               ok=1; break
             fi
@@ -107,7 +117,7 @@ jobs:
       - name: 上传 Image
         uses: actions/upload-artifact@v4
         with:
-          name: mt6989-a16-Image
+          name: mt6989-a16-diagnostic-Image
           path: ${{ github.workspace }}/AnyKernel3/Image
           if-no-files-found: error
           compression-level: 0
