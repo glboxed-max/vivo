@@ -1,9 +1,9 @@
-name: PD2339 MT6989 Android 16 源码基线
+name: PD2339 MT6989 Android 16 厂商配置对照
 
 on:
   workflow_dispatch:
   push:
-    branches: [pd2339-vendor-source-ci-20261118]
+    branches: [pd2339-vendor-config-ci-20261118]
 
 permissions:
   contents: read
@@ -64,6 +64,16 @@ jobs:
             sed -i '/^source "kernel\/vivo_rsc\/Kconfig"$/d' Kconfig
           fi
 
+      - name: 应用公开的 PD2339 厂商配置
+        working-directory: ${{ github.workspace }}/kernel/common
+        run: |
+          set -euo pipefail
+          config=arch/arm64/configs/gki_defconfig
+          cp "$GITHUB_WORKSPACE/.github/config/pd2339-a16-public.defconfig" "$config"
+          scripts/config --file "$config" --set-str MODULE_SIG_KEY certs/signing_key.pem
+          scripts/config --file "$config" --set-str EXT_MODULES ""
+          scripts/config --file "$config" --disable VIVO_RSC
+
       - name: 关掉 WERROR（-Warray-bounds 会误伤，且不影响 ABI）
         run: |
           set -euo pipefail
@@ -111,13 +121,17 @@ jobs:
           done
           [ -n "$IMG" ] || { echo "找不到 Image"; find . -name Image -path '*kernel_aarch64*' | head; exit 1; }
           cp "$IMG" "$GITHUB_WORKSPACE/AnyKernel3/Image"
+          common/scripts/extract-ikconfig "$IMG" > "$GITHUB_WORKSPACE/AnyKernel3/effective.config"
+          test -s "$GITHUB_WORKSPACE/AnyKernel3/effective.config"
           ls -l "$GITHUB_WORKSPACE/AnyKernel3/Image"
           strings "$GITHUB_WORKSPACE/AnyKernel3/Image" | grep -m1 "SMP preempt mod_unload" || true
 
       - name: 上传 Image
         uses: actions/upload-artifact@v4
         with:
-          name: mt6989-a16-diagnostic-Image
-          path: ${{ github.workspace }}/AnyKernel3/Image
+          name: mt6989-a16-vendor-config
+          path: |
+            ${{ github.workspace }}/AnyKernel3/Image
+            ${{ github.workspace }}/AnyKernel3/effective.config
           if-no-files-found: error
           compression-level: 0
