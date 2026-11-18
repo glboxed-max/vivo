@@ -1,0 +1,13 @@
+drivers/firmware/arm_ffa/ffa-module.ko
+drivers/iio/buffer/industrialio-triggered-buffer.ko
+drivers/iio/buffer/kfifo_buf.ko
+drivers/leds/leds-pwm.ko
+drivers/media/v4l2-core/v4l2-flash-led-class.ko
+drivers/perf/arm_dsu_pmu.ko
+drivers/phy/mediatek/phy-mtk-mipi-dsi-drv.ko
+drivers/power/reset/reboot-mode.ko
+drivers/power/reset/syscon-reboot-mode.ko
+drivers/tee/tee.ko
+drivers/thermal/thermal-generic-adc.ko
+net/mac80211/mac80211.ko
+net/wireless/cfg80211.ko

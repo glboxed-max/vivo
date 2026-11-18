@@ -88,6 +88,8 @@ jobs:
           set -uo pipefail
           sed -i 's/check_defconfig//' ./common/build.config.gki
           sed -i '/name = "kernel_aarch64",/a\    check_defconfig = "disabled",' common/BUILD.bazel
+          python3 "$GITHUB_WORKSPACE/.github/tools/bazel_module_outs.py" \
+            "$GITHUB_WORKSPACE/.github/config/pd2339-vendor-extra.modules" common/BUILD.bazel || exit 1
           ok=0
           for i in 1 2 3 4; do
             echo "===== Bazel 构建 第 $i 次 ====="

@@ -9,17 +9,20 @@ import re
 import sys
 
 log_path, bazel_path = sys.argv[1], sys.argv[2]
-log = open(log_path, encoding='utf-8', errors='replace').read()
+module_path = r"[A-Za-z0-9_./-]+\.ko"
+with open(log_path, encoding="utf-8", errors="replace") as source:
+    log = source.read()
 
-mods = []
-start = log.find('built but not copied')
-if start >= 0:
-    seg = log[start:]
-    end = seg.find('Alternatively')
-    if end >= 0:
-        seg = seg[:end]
-    mods = re.findall(r'"([A-Za-z0-9_\-/\.]+\.ko)"', seg)
-mods = sorted(set(mods))
+if log_path.endswith(".modules"):
+    mods = sorted({line.strip() for line in log.splitlines() if re.fullmatch(module_path, line.strip())})
+else:
+    blocks = re.findall(
+        r"^ERROR: The following kernel modules are built but not copied[^\n]*\n"
+        r'((?:[ \t]*"' + module_path + r'",?[ \t]*\n)+)',
+        log,
+        re.MULTILINE,
+    )
+    mods = sorted(set(re.findall(r'"(' + module_path + r')"', "".join(blocks))))
 if not mods:
     print('没有解析到缺失模块')
     sys.exit(1)
