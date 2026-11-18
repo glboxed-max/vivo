@@ -1,13 +1,9 @@
-name: GKI Stock Probe (原厂 gki_defconfig 基线)
-
-# 目的：用「厂商设备的 /proc/config.gz」去编 AOSP 6.1.145 树（可叠加 BTF 反推的头文件补丁），
-#       产出 Image 后本地解析 __ksymtab/__kcrctab + BTF，与厂商模块逐项对比。
-#       全程无需刷机。
+name: PD2339 MT6989 Android 16 源码基线
 
 on:
   workflow_dispatch:
   push:
-    branches: [pd2339-gki-ci-20261118]
+    branches: [pd2339-vendor-source-ci-20261118]
 
 permissions:
   contents: read
@@ -40,6 +36,23 @@ jobs:
           kernel_version: '6.1'
           version: android14-6.1
           os_patch_level: '2025-09'
+
+      - name: 切换到 MT6989 Android 16 公开源码
+        working-directory: ${{ github.workspace }}/kernel
+        env:
+          VENDOR_COMMIT: 416f41a95734d2c05bca293ac5d6b3187ad78f2e
+        run: |
+          set -euo pipefail
+          git init vendor-common
+          git -C vendor-common fetch --depth=1 https://github.com/winzkh/android_kernel_vivo_mt6989.git "$VENDOR_COMMIT"
+          git -C vendor-common checkout --detach FETCH_HEAD
+          test "$(git -C vendor-common rev-parse HEAD)" = "$VENDOR_COMMIT"
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL) =' vendor-common/Makefile
+          grep -qx 'VERSION = 6' vendor-common/Makefile
+          grep -qx 'PATCHLEVEL = 1' vendor-common/Makefile
+          grep -qx 'SUBLEVEL = 145' vendor-common/Makefile
+          mv common "$RUNNER_TEMP/aosp-common"
+          mv vendor-common common
 
       - name: 关掉 WERROR（-Warray-bounds 会误伤，且不影响 ABI）
         run: |
@@ -94,7 +107,7 @@ jobs:
       - name: 上传 Image
         uses: actions/upload-artifact@v4
         with:
-          name: gki-Image
+          name: mt6989-a16-Image
           path: ${{ github.workspace }}/AnyKernel3/Image
           if-no-files-found: error
           compression-level: 0
