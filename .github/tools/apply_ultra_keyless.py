@@ -97,7 +97,7 @@ natives.write_text(text, encoding="utf-8")
 
 cli = java / "ui/util/KsuCli.kt"
 text = cli.read_text(encoding="utf-8")
-text = replace_body(text, "fun rootAvailable(): Boolean", f"    return {session}.ready")
+text = replace_body(text, "fun rootAvailable(): Boolean", f"    return {session}.ready && runCatching {{ {session}.rootShell().isRoot }}.getOrDefault(false)")
 text = text.replace("fun getRootShell(globalMnt: Boolean = false): Shell {", f"fun getRootShell(globalMnt: Boolean = false): Shell {{\n    if ({session}.ready) return {session}.rootShell()")
 text = replace_body(text, "fun createRootShell(globalMnt: Boolean = false): Shell", f'''    if ({session}.ready) return {session}.rootShell()
     return Shell.Builder.create().build("/system/bin/sh")''')
