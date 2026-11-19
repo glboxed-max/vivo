@@ -1,0 +1,96 @@
+name: PD2339 Ultra 3.x 免手输凭证适配版
+on:
+  workflow_dispatch:
+  push:
+    branches: [pd2339-ultra-keyless-ci]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SukiSU-Nova/SukiSU-Nova
+          ref: d2ab325e1863c6abae1935d5f617a92fb1574983
+          fetch-depth: 0
+          persist-credentials: false
+          path: ultra
+      - uses: actions/checkout@v4
+        with:
+          repository: xianwan1314/APatch
+          ref: e8e4651c16fb5075882a25813c8732285fdb3505
+          persist-credentials: false
+          path: apatch
+      - uses: actions/checkout@v4
+        with:
+          repository: WildKernels/AnyKernel3
+          ref: e1e9dce98430c5c6f231f7094a8c7f4ecaf50948
+          persist-credentials: false
+          path: ak3
+      - name: 接入 Ultra 原始页面与自动配对后端
+        run: |
+          python3 .github/tools/apply_ultra_keyless.py ultra apatch
+          git -C ultra diff --check
+          sh -n .github/tools/ultra-paired-anykernel.sh
+      - name: 准备内置修补工具和 AnyKernel3 模板
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p components output ultra/manager/app/src/main/assets/pairing ultra/manager/app/src/main/jniLibs/arm64-v8a
+          gh release download 0.13.9 -R bmax121/KernelPatch -p kpimg-android -p kptools-android -D components
+          echo 'eb2e3d16fe69410150efcf6f9425baf8cad9ac0c39f051fc8b40ce57c7143adb  components/kpimg-android' | sha256sum -c
+          echo '63a8656a79b74baadcf0ce57a7e89a8c8a94beb35b25df58aec0bcf1d066bc5b  components/kptools-android' | sha256sum -c
+          cp components/kpimg-android ultra/manager/app/src/main/assets/pairing/kpimg
+          cp components/kptools-android ultra/manager/app/src/main/jniLibs/arm64-v8a/libkptools.so
+          cp .github/tools/ultra-paired-anykernel.sh ak3/anykernel.sh
+          cp .github/tools/ultra-keyless/使用说明.md ak3/
+          cd ak3
+          zip -qr ../output/Ultra-Paired-AnyKernel3-template.zip . -x '.git/*' '.github/*'
+          cd ..
+          cp output/Ultra-Paired-AnyKernel3-template.zip ultra/manager/app/src/main/assets/pairing/AnyKernel3-template.zip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 准备稳定构建签名
+        env:
+          SIGNING_STORE: ${{ secrets.ULTRA_PD2339_KEYSTORE }}
+        run: |
+          test -n "$SIGNING_STORE"
+          printf '%s' "$SIGNING_STORE" | base64 -d > "$RUNNER_TEMP/pd2339.p12"
+          chmod 600 "$RUNNER_TEMP/pd2339.p12"
+      - name: 单元测试与编译 ARM64 APK
+        working-directory: ultra/manager
+        env:
+          ULTRA_KEYSTORE_FILE: ${{ runner.temp }}/pd2339.p12
+          ULTRA_KEYSTORE_PASSWORD: ${{ secrets.ULTRA_PD2339_STORE_PASSWORD }}
+        run: bash gradlew --no-daemon testDebugUnitTest assembleDebug
+      - name: 检查签名和导出结果
+        run: |
+          cp ultra/manager/app/build/outputs/apk/debug/*.apk output/
+          cp .github/tools/ultra-keyless/使用说明.md output/
+          apk=$(find output -maxdepth 1 -name '*.apk' -print -quit)
+          apksigner=$(find "$ANDROID_HOME/build-tools" -path '*/apksigner' | sort -V | tail -1)
+          "$apksigner" verify --print-certs "$apk" > output/APK-signature.txt
+          unzip -tq "$apk"
+          unzip -tq output/Ultra-Paired-AnyKernel3-template.zip
+          cd output
+          sha256sum *.apk *.zip > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PD2339-Ultra-Keyless-debug
+          path: output/*
+          if-no-files-found: error
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ultra-keyless-tests
+          path: |
+            ultra/manager/app/build/reports/tests/
+            ultra/manager/app/build/test-results/
+          if-no-files-found: ignore
