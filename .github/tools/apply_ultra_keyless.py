@@ -154,6 +154,15 @@ home = java / "ui/screen/Home.kt"
 text = home.read_text(encoding="utf-8").replace("                if (checkUpdate) {\n                    UpdateCard()\n                }", "")
 assert "if (checkUpdate)" not in text
 home.write_text(text, encoding="utf-8")
+home_model = java / "ui/viewmodel/HomeViewModel.kt"
+text = replace_body(home_model.read_text(encoding="utf-8"), "fun checkForUpdates(context: Context)",
+    "        // Updates are intentionally disabled in this device-specific debug build.")
+home_model.write_text(text, encoding="utf-8")
+settings = java / "ui/screen/Settings.kt"
+text = settings.read_text(encoding="utf-8")
+start = text.index("                    // 更新检查开关")
+end = text.index("                    // WebUI引擎选择", start)
+settings.write_text(text[:start] + text[end:], encoding="utf-8")
 kpm = java / "ui/screen/Kpm.kt"
 text = kpm.read_text(encoding="utf-8")
 embed = text.index("isEmbed = true")
