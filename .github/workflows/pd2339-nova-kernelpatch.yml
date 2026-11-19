@@ -5,9 +5,10 @@ on:
     branches: [pd2339-nova-apatch-ci]
 permissions:
   contents: read
+  actions: read
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -68,10 +69,22 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: 构建 Recovery 静态修补工具并执行 ARM64 检查
+      - name: 准备静态工具，缺失时从固定源码重建
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
+          if gh run download 44522250552 -R glboxed-max/vivo -n PD2339-Nova-KernelPatch-debug -D recovery-cache; then
+            unzip -p recovery-cache/PD2339-Nova-KernelPatch-AnyKernel3-debug.zip tools/kptools > recovery-cache/kptools
+            if echo '8cee4a7cbbb4e83ce6d4feb9b53b9a8e0bc78140692eac7b1848db74b7b65c79  recovery-cache/kptools' | sha256sum -c; then
+              cp recovery-cache/kptools components/kptools-recovery
+              chmod 755 components/kptools-recovery
+              file components/kptools-recovery
+              if readelf -l components/kptools-recovery | grep -q INTERP; then exit 1; fi
+              exit 0
+            fi
+          fi
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 update -qq
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 install -y --no-install-recommends gcc-aarch64-linux-gnu qemu-user
           cmake -S zlib -B zlib-build -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_BUILD_TYPE=Release
           cmake --build zlib-build --target zlibstatic -j2
           make -C kernelpatch/kernel TARGET_COMPILE=aarch64-linux-gnu- hdr
