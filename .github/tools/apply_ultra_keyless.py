@@ -174,6 +174,9 @@ kpm.write_text(text, encoding="utf-8")
 for path in (main / "java/zako").rglob("*.kt"):
     text = path.read_text(encoding="utf-8").replace("Natives.version >= Natives.MINIMAL_SUPPORTED_KPM", "Natives.isKPMEnabled()")
     text = text.replace("BottomBarDestination.entries.forEach { destination ->", "BottomBarDestination.entries.forEach { destination ->\n            if (destination == BottomBarDestination.Module) return@forEach")
+    if path.name == "BottomBar.kt":
+        assert text.count("alwaysShowLabel = false") == 4
+        text = text.replace("alwaysShowLabel = false", "alwaysShowLabel = true")
     path.write_text(text, encoding="utf-8")
 
 manifest = main / "AndroidManifest.xml"
@@ -200,7 +203,7 @@ manifest.write_text(text, encoding="utf-8")
 root_gradle = args.ultra / "manager/build.gradle.kts"
 text = root_gradle.read_text(encoding="utf-8")
 text = text.replace('val androidCompileNdkVersion = "28.0.13004108"', 'val androidCompileNdkVersion = "29.0.14206865"')
-text = text.replace('val managerVersionCode by extra(1 * 10000 + getGitCommitCount() + 700)', 'val managerVersionCode by extra(3000200)')
+text = text.replace('val managerVersionCode by extra(1 * 10000 + getGitCommitCount() + 700)', 'val managerVersionCode by extra(3000201)')
 text = text.replace('val managerVersionName by extra(getGitDescribe())', 'val managerVersionName by extra("Ultra3x-keyless-debug")')
 text = text.replace('abiFilters("arm64-v8a", "x86_64", "armeabi-v7a")', 'abiFilters("arm64-v8a")')
 text = text.replace('abiFilters += listOf("arm64-v8a", "x86_64", "armeabi-v7a")', 'abiFilters += listOf("arm64-v8a")')
