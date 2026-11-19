@@ -1,0 +1,104 @@
+name: PD2339 Nova v3 管理器构建与依赖校验
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  verify-nova:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: 检出 Nova v3.0.0 源码
+        uses: actions/checkout@v4
+        with:
+          repository: SukiSU-Nova/SukiSU-Nova
+          ref: c60f21b9e00e35e898f8d21e0612465b76b9beec
+          path: nova
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 应用并校验中文界面文案
+        run: |
+          set -euo pipefail
+          python3 .github/tools/apply_nova_ui_overlay.py nova
+          python3 .github/tools/apply_nova_debug_defaults.py nova
+      - name: 接入并校验启动镜像输入和输出检查
+        run: |
+          set -euo pipefail
+          python3 .github/tools/apply_nova_boot_overlay.py nova
+          python3 .github/tools/apply_nova_split_image_overlay.py nova
+          git -C nova diff --check
+      - name: 核验 Nova 同版 ARM64 发布物
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/tools/verify_nova_release.py "$RUNNER_TEMP/nova-v3"
+      - name: 检查 LKM 内的 KPM 桥接
+        run: |
+          set -euo pipefail
+          module="$RUNNER_TEMP/nova-v3/lkm-aarch64-android14-6.1_kernelsu.ko"
+          readelf --wide --symbols "$module" > "$RUNNER_TEMP/nova-symbols.txt"
+          grep -E '[[:space:]]sukisu_kpm_bridge$' "$RUNNER_TEMP/nova-symbols.txt"
+          grep -E '[[:space:]]ksu_extension_kpm_io$' "$RUNNER_TEMP/nova-symbols.txt"
+          echo '已确认桥接。内核侧后端、ABI 和启动尚需验证。'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 准备同版 ARM64 管理器组件
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import os
+          import shutil
+          import zipfile
+
+          assets = Path(os.environ["RUNNER_TEMP"]) / "nova-v3"
+          app = Path("nova/manager/app")
+          native = app / "src/main/jniLibs/arm64-v8a"
+          native.mkdir(parents=True, exist_ok=True)
+          shutil.copyfile(assets / "ksud-aarch64-linux-android", native / "libksud.so")
+
+          generated = app / "build/generated/kpmTools"
+          apk = assets / "SukiSU_Nova_v3.0.0_35000-arm64-v8a-release.apk"
+          with zipfile.ZipFile(apk) as release:
+              for entry, relative in (
+                  ("assets/kpm/kpimg", "assets/kpm/kpimg"),
+                  ("lib/arm64-v8a/libkptools.so", "jniLibs/arm64-v8a/libkptools.so"),
+              ):
+                  content = release.read(entry)
+                  if not content:
+                      raise SystemExit(f"官方 APK 组件为空：{entry}")
+                  destination = generated / relative
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(content)
+          PYTHON
+      - name: 编译 ARM64 调试管理器
+        working-directory: nova/manager
+        run: bash gradlew --no-daemon assembleDebug -x :app:downloadKpmTools
+      - name: 核对 APK 签名并导出配套公钥证书
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/manager-certificate"
+          cert="$RUNNER_TEMP/manager-certificate/manager.der"
+          keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android -file "$cert"
+          apk=$(find nova/manager/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)
+          test -n "$apk"
+          apksigner=$(find "$ANDROID_HOME/build-tools" -path '*/apksigner' | sort -V | tail -1)
+          test -n "$apksigner"
+          "$apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/apk-signer.txt"
+          digest=$(sha256sum "$cert" | cut -d' ' -f1)
+          grep -F "certificate SHA-256 digest: $digest" "$RUNNER_TEMP/apk-signer.txt"
+      - name: 上传用于内核配对的公开证书
+        uses: actions/upload-artifact@v4
+        with:
+          name: pd2339-nova-manager-certificate
+          path: ${{ runner.temp }}/manager-certificate/manager.der
+          if-no-files-found: error
+      - name: 上传调试 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PD2339-Nova-v3-debug
+          path: nova/manager/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

@@ -1,17 +1,20 @@
-name: PD2339 Nova v3 内建接口试编
+name: PD2339 Nova v3 配套管理器与 AnyKernel3
 
 # 基于已验证的 6.1.145 GKI 构建，检查 Nova 内建接口与编译结果。
 
 on:
   workflow_dispatch:
   push:
-    branches: [pd2339-nova-builtin-ci]
+    branches: [pd2339-nova-paired-ci]
 
 permissions:
   contents: read
 
 jobs:
+  manager:
+    uses: ./.github/workflows/pd2339-nova-v3.yml
   probe:
+    needs: manager
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -47,6 +50,12 @@ jobs:
           path: nova
           persist-credentials: false
 
+      - name: 下载同次构建的管理器公开证书
+        uses: actions/download-artifact@v4
+        with:
+          name: pd2339-nova-manager-certificate
+          path: manager-certificate
+
       - name: 内建 Nova Root 与 KPM 桥接
         working-directory: kernel/common
         run: |
@@ -61,6 +70,15 @@ jobs:
           sed -i '/^endmenu$/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
           test "$(grep -Fxc 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig)" = 1
           scripts/config --file arch/arm64/configs/gki_defconfig -e KSU -e KPM -e KALLSYMS_ALL
+          certificate="$GITHUB_WORKSPACE/manager-certificate/manager.der"
+          cert_hash=$(sha256sum "$certificate" | cut -d' ' -f1)
+          cert_size=$(wc -c < "$certificate")
+          test "$cert_size" -gt 0 && test "$cert_size" -le 1024
+          kbuild=drivers/kernelsu/Kbuild
+          test "$(grep -Ec '^KSU_EXPECTED_SIZE +\?=' "$kbuild")" = 1
+          test "$(grep -Ec '^KSU_EXPECTED_HASH +\?=' "$kbuild")" = 1
+          sed -i -E "s/^KSU_EXPECTED_SIZE +\?=.*/KSU_EXPECTED_SIZE ?= $cert_size/; s/^KSU_EXPECTED_HASH +\?=.*/KSU_EXPECTED_HASH ?= $cert_hash/" "$kbuild"
+          printf '%s\n' "$cert_hash" > "$GITHUB_WORKSPACE/AnyKernel3/manager-certificate.sha256"
 
       - name: 关掉 WERROR（-Warray-bounds 会误伤，且不影响 ABI）
         run: |
@@ -116,6 +134,8 @@ jobs:
           grep -E '[[:space:]]sukisu_kpm_bridge$' "$RUNNER_TEMP/nova-kernel-symbols"
           grep -E '[[:space:]]ksu_extension_kpm_io$' "$RUNNER_TEMP/nova-kernel-symbols"
           grep -E '[[:space:]]kernelsu_init$' "$RUNNER_TEMP/nova-kernel-symbols"
+          cert_hash=$(cat "$GITHUB_WORKSPACE/AnyKernel3/manager-certificate.sha256")
+          grep -aFq "$cert_hash" "$IMG"
           cp "$IMG" "$GITHUB_WORKSPACE/AnyKernel3/Image"
 
       - name: 上传 Image
@@ -127,3 +147,28 @@ jobs:
             ${{ github.workspace }}/AnyKernel3/effective.config
           if-no-files-found: error
           compression-level: 0
+      - name: 检出固定版本的 AnyKernel3
+        uses: actions/checkout@v4
+        with:
+          repository: WildKernels/AnyKernel3
+          ref: e1e9dce98430c5c6f231f7094a8c7f4ecaf50948
+          path: ak3
+          persist-credentials: false
+      - name: 打包 PD2339 专用验证包
+        run: |
+          set -euo pipefail
+          install -m 0644 .github/tools/pd2339-anykernel.sh ak3/anykernel.sh
+          install -m 0644 AnyKernel3/Image ak3/Image
+          install -m 0644 AnyKernel3/manager-certificate.sha256 ak3/manager-certificate.sha256
+          sh -n ak3/anykernel.sh
+          test -f ak3/META-INF/com/google/android/update-binary
+          test -f ak3/tools/ak3-core.sh
+          cd ak3
+          zip -qr "$RUNNER_TEMP/PD2339-Nova-v3-AnyKernel3-diagnostic.zip" . -x '.git*' '.github/*'
+          unzip -tq "$RUNNER_TEMP/PD2339-Nova-v3-AnyKernel3-diagnostic.zip"
+      - name: 上传 AnyKernel3 验证包
+        uses: actions/upload-artifact@v4
+        with:
+          name: PD2339-Nova-v3-AnyKernel3-diagnostic
+          path: ${{ runner.temp }}/PD2339-Nova-v3-AnyKernel3-diagnostic.zip
+          if-no-files-found: error
