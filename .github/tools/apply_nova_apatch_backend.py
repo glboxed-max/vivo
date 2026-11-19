@@ -88,3 +88,10 @@ print("Nova KernelPatch screen wired to main and install routes")
 app_gradle = args.nova / "manager/app/build.gradle.kts"
 text = app_gradle.read_text().replace('abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "riscv64")', 'abiFilters += listOf("arm64-v8a")')
 app_gradle.write_text(text)
+
+manifest = main / "AndroidManifest.xml"
+text = manifest.read_text()
+permission = '<uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />'
+if permission not in text:
+    text = text.replace('<uses-permission android:name="android.permission.INTERNET" />', permission + '\n    <uses-permission android:name="android.permission.INTERNET" />')
+manifest.write_text(text)

@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -29,6 +31,9 @@ fun KernelPatchScreen() {
     var selected by remember { mutableStateOf<Uri?>(null) }
     var output by remember { mutableStateOf<File?>(null) }
     var uid by remember { mutableStateOf("") }
+    var appQuery by remember { mutableStateOf("") }
+    var apps by remember { mutableStateOf<List<Triple<String, String, Int>>>(emptyList()) }
+    var showApps by remember { mutableStateOf(false) }
     var module by remember { mutableStateOf("") }
     var args by remember { mutableStateOf("") }
     var modules by remember { mutableStateOf("") }
@@ -91,6 +96,15 @@ fun KernelPatchScreen() {
         HorizontalDivider()
         Text("Root 授权", style = MaterialTheme.typography.titleLarge)
         Text("按应用 UID 管理当前内核授权。此版本重启后需连接管理器并重新授权。")
+        OutlinedButton(enabled = !busy, onClick = {
+            runOperation {
+                apps = context.packageManager.getInstalledApplications(0).map { app ->
+                    Triple(context.packageManager.getApplicationLabel(app).toString(), app.packageName, app.uid)
+                }.sortedBy { it.first.lowercase() }
+                showApps = true
+                "已读取当前用户应用列表"
+            }
+        }) { Text("选择应用") }
         OutlinedTextField(uid, { uid = it }, label = { Text("应用 UID") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = !busy && ready, onClick = { runOperation { KernelPatchBackend.grant(uid.toInt(), true); "已授权 UID $uid" } }) { Text("授权") }
@@ -111,6 +125,25 @@ fun KernelPatchScreen() {
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         Text(message, style = MaterialTheme.typography.bodyMedium)
     }
+    if (showApps) AlertDialog(
+        onDismissRequest = { showApps = false },
+        title = { Text("选择应用") },
+        text = {
+            Column {
+                OutlinedTextField(appQuery, { appQuery = it }, label = { Text("名称或包名") })
+                LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                    items(apps.filter { it.first.contains(appQuery, true) || it.second.contains(appQuery, true) }) { app ->
+                        TextButton(onClick = {
+                            uid = app.third.toString()
+                            message = "已选择 ${app.first}（${app.second}），UID ${app.third}"
+                            showApps = false
+                        }) { Text("${app.first}\n${app.second} · UID ${app.third}") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { showApps = false }) { Text("关闭") } },
+    )
     if (confirmFlash) AlertDialog(onDismissRequest = { confirmFlash = false }, title = { Text("确认写入当前槽位 boot") }, text = { Text("将备份当前 boot，修补其内核并写回当前槽位。失败可能导致无法开机。需要已验证的 KernelPatch Root，请预先准备可用的原厂镜像与恢复方式。") }, confirmButton = {
         TextButton(onClick = {
             confirmFlash = false

@@ -88,8 +88,8 @@ object KernelPatchBackend {
     }
 
     fun patch(context: Context, input: File, key: String, directory: File): File {
-        require(key.length >= 16 && key.none { it == '\n' || it == '\r' || it == '\u0000' }) { "SuperKey 至少 16 个字符，不能包含换行或空字符" }
-        input.inputStream().use { require(String(it.readNBytes(8), Charsets.US_ASCII) == "ANDROID!") { "请选择 boot.img" } }
+        require(key.length in 16..63 && key.all { it.code in 33..126 }) { "SuperKey 需为 16–63 个可见 ASCII 字符" }
+        input.inputStream().use { require(String(ByteArray(8).also { header -> check(it.read(header) == 8) }, Charsets.US_ASCII) == "ANDROID!") { "请选择 boot.img" } }
         val core = File(directory, "kpimg")
         context.assets.open("apatch/kpimg").use { stream -> core.outputStream().use { stream.copyTo(it) } }
         val output = File(directory, "patched-boot.img")
@@ -103,7 +103,7 @@ object KernelPatchBackend {
         val rc = process.waitFor()
         check(rc == 0 && output.isFile && output.length() > 4096) { "修补失败 ($rc)，日志保存在 ${log.name}" }
         check(hash(input) == before) { "输入镜像摘要发生变化" }
-        output.inputStream().use { check(String(it.readNBytes(8), Charsets.US_ASCII) == "ANDROID!") { "输出镜像头无效" } }
+        output.inputStream().use { check(String(ByteArray(8).also { header -> check(it.read(header) == 8) }, Charsets.US_ASCII) == "ANDROID!") { "输出镜像头无效" } }
         return output
     }
 }

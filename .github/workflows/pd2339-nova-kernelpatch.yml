@@ -30,6 +30,18 @@ jobs:
           ref: e1e9dce98430c5c6f231f7094a8c7f4ecaf50948
           persist-credentials: false
           path: ak3
+      - uses: actions/checkout@v4
+        with:
+          repository: bmax121/KernelPatch
+          ref: b51197aaba8f2272dd8a3e30c85698a29aa928c9
+          persist-credentials: false
+          path: kernelpatch
+      - uses: actions/checkout@v4
+        with:
+          repository: madler/zlib
+          ref: 51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf
+          persist-credentials: false
+          path: zlib
       - name: 接入 KernelPatch 后端
         run: |
           python3 .github/tools/apply_nova_apatch_backend.py nova apatch
@@ -56,13 +68,26 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
+      - name: 构建 Recovery 静态修补工具并执行 ARM64 检查
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
+          cmake -S zlib -B zlib-build -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_BUILD_TYPE=Release
+          cmake --build zlib-build --target zlibstatic -j2
+          cmake -S kernelpatch/tools -B kptools-static -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXE_LINKER_FLAGS=-static -DZLIB_INCLUDE_DIR="$GITHUB_WORKSPACE/zlib;$GITHUB_WORKSPACE/zlib-build" -DZLIB_LIBRARY="$GITHUB_WORKSPACE/zlib-build/libz.a"
+          cmake --build kptools-static -j2
+          aarch64-linux-gnu-strip kptools-static/kptools
+          file kptools-static/kptools
+          if readelf -l kptools-static/kptools | grep -q INTERP; then exit 1; fi
+          qemu-aarch64 kptools-static/kptools -v
+          cp kptools-static/kptools components/kptools-recovery
       - name: 编译调试 APK
         working-directory: nova/manager
         run: bash gradlew --no-daemon assembleDebug -x :app:downloadKpmTools
       - name: 打包 AnyKernel3
         run: |
           cp .github/tools/pd2339-kernelpatch-anykernel.sh ak3/anykernel.sh
-          cp components/kptools-android ak3/tools/kptools
+          cp components/kptools-recovery ak3/tools/kptools
           cp components/kpimg-android ak3/tools/kpimg
           chmod 755 ak3/tools/kptools
           mkdir -p output

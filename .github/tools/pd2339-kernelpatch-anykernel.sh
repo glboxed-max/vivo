@@ -20,7 +20,8 @@ keyfile=/sdcard/Download/Nova-superkey.txt
 [ -f "$AKHOME/superkey.txt" ] && keyfile="$AKHOME/superkey.txt"
 [ -f "$keyfile" ] || abort "请先创建 /sdcard/Download/Nova-superkey.txt，内容为自行设置的至少16字符 SuperKey"
 IFS= read -r superkey < "$keyfile"
-[ "${#superkey}" -ge 16 ] || abort "SuperKey 至少需要16字符"
+[ "${#superkey}" -ge 16 ] && [ "${#superkey}" -le 63 ] || abort "SuperKey 需要16至63个字节"
+case "$superkey" in *[!\!-\~]*) abort "SuperKey 需要可见 ASCII 字符" ;; esac
 mkdir -p "$AKHOME/work" || abort "无法建立工作目录"
 cd "$AKHOME/work" || abort "无法进入工作目录"
 dd if="$BLOCK" of=original-boot.img bs=1048576 || abort "读取 boot 失败"
