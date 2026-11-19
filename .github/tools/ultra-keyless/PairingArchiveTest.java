@@ -18,13 +18,13 @@ public class PairingArchiveTest {
 
     @Test public void wrongPasswordFails() {
         byte[] archive = PairingArchive.INSTANCE.seal(new byte[]{1}, password);
-        assertThrows(Exception.class, () -> PairingArchive.INSTANCE.open(archive, "another-password".toCharArray()));
+        assertThrows(javax.crypto.AEADBadTagException.class, () -> PairingArchive.INSTANCE.open(archive, "another-password".toCharArray()));
     }
 
     @Test public void tamperingFails() {
         byte[] archive = PairingArchive.INSTANCE.seal(new byte[]{1}, password);
         archive[archive.length - 1] ^= 1;
-        assertThrows(Exception.class, () -> PairingArchive.INSTANCE.open(archive, password));
+        assertThrows(javax.crypto.AEADBadTagException.class, () -> PairingArchive.INSTANCE.open(archive, password));
     }
 
     @Test public void malformedAndOversizedInputFails() {
