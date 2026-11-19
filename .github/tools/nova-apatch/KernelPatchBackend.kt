@@ -5,6 +5,7 @@ import android.net.Uri
 import com.topjohnwu.superuser.Shell
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.FutureTask
 import me.bmax.apatch.BackendSession
 import me.bmax.apatch.Natives
 
@@ -62,10 +63,19 @@ object KernelPatchBackend {
     }
 
     fun rootShell(): Shell {
-        check(ready && Natives.su()) { "无法取得 KernelPatch Root" }
-        val shell = Shell.Builder.create().build("/system/bin/sh")
-        check(shell.isRoot) { "Root shell 验证失败" }
-        return shell
+        check(ready) { "请先验证 SuperKey" }
+        // Native su changes the calling thread credentials. Keep it off shared workers.
+        val request = FutureTask<Shell> {
+            check(Natives.su()) { "无法取得 KernelPatch Root" }
+            val shell = Shell.Builder.create().build("/system/bin/sh")
+            if (!shell.isRoot) {
+                shell.close()
+                error("Root shell 验证失败")
+            }
+            shell
+        }
+        Thread(request, "KernelPatchRootShell").start()
+        return request.get()
     }
 
     fun currentBoot(shell: Shell): String {
