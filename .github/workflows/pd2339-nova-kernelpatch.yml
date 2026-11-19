@@ -74,6 +74,7 @@ jobs:
           sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
           cmake -S zlib -B zlib-build -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_BUILD_TYPE=Release
           cmake --build zlib-build --target zlibstatic -j2
+          make -C kernelpatch/kernel TARGET_COMPILE=aarch64-linux-gnu- hdr
           cmake -S kernelpatch/tools -B kptools-static -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXE_LINKER_FLAGS=-static -DZLIB_INCLUDE_DIR="$GITHUB_WORKSPACE/zlib;$GITHUB_WORKSPACE/zlib-build" -DZLIB_LIBRARY="$GITHUB_WORKSPACE/zlib-build/libz.a"
           cmake --build kptools-static -j2
           aarch64-linux-gnu-strip kptools-static/kptools
