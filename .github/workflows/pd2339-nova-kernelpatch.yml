@@ -1,0 +1,91 @@
+name: PD2339 Nova KernelPatch 管理器与修补包
+on:
+  workflow_dispatch:
+  push:
+    branches: [pd2339-nova-apatch-ci]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SukiSU-Nova/SukiSU-Nova
+          ref: c60f21b9e00e35e898f8d21e0612465b76b9beec
+          fetch-depth: 0
+          persist-credentials: false
+          path: nova
+      - uses: actions/checkout@v4
+        with:
+          repository: xianwan1314/APatch
+          ref: e8e4651c16fb5075882a25813c8732285fdb3505
+          persist-credentials: false
+          path: apatch
+      - uses: actions/checkout@v4
+        with:
+          repository: WildKernels/AnyKernel3
+          ref: e1e9dce98430c5c6f231f7094a8c7f4ecaf50948
+          persist-credentials: false
+          path: ak3
+      - name: 接入 KernelPatch 后端
+        run: |
+          python3 .github/tools/apply_nova_apatch_backend.py nova apatch
+          git -C nova diff --check
+          sh -n .github/tools/pd2339-kernelpatch-anykernel.sh
+      - name: 下载并核验固定后端组件
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p components
+          gh release download 0.13.9 -R bmax121/KernelPatch -p kptools-android -p kpimg-android -D components
+          gh release download v3.0.0 -R SukiSU-Nova/SukiSU-Nova -p ksud-aarch64-linux-android -D components
+          echo '63a8656a79b74baadcf0ce57a7e89a8c8a94beb35b25df58aec0bcf1d066bc5b  components/kptools-android' | sha256sum -c
+          echo 'eb2e3d16fe69410150efcf6f9425baf8cad9ac0c39f051fc8b40ce57c7143adb  components/kpimg-android' | sha256sum -c
+          echo '61e81ce1d1508e2edbf9bcd2ec7bb5535bd4856f009509194f808631ae2e908f  components/ksud-aarch64-linux-android' | sha256sum -c
+          mkdir -p nova/manager/app/src/main/assets/apatch nova/manager/app/src/main/jniLibs/arm64-v8a
+          cp components/kpimg-android nova/manager/app/src/main/assets/apatch/kpimg
+          cp components/kptools-android nova/manager/app/src/main/jniLibs/arm64-v8a/libkptools.so
+          cp components/ksud-aarch64-linux-android nova/manager/app/src/main/jniLibs/arm64-v8a/libksud.so
+          mkdir -p nova/manager/app/build/generated/kpmTools/assets/kpm nova/manager/app/build/generated/kpmTools/jniLibs/arm64-v8a
+          cp components/kpimg-android nova/manager/app/build/generated/kpmTools/assets/kpm/kpimg
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 编译调试 APK
+        working-directory: nova/manager
+        run: bash gradlew --no-daemon assembleDebug -x :app:downloadKpmTools
+      - name: 打包 AnyKernel3
+        run: |
+          cp .github/tools/pd2339-kernelpatch-anykernel.sh ak3/anykernel.sh
+          cp components/kptools-android ak3/tools/kptools
+          cp components/kpimg-android ak3/tools/kpimg
+          chmod 755 ak3/tools/kptools
+          mkdir -p output
+          cp nova/manager/app/build/outputs/apk/debug/*.apk output/
+          cp .github/tools/nova-apatch/使用说明.md output/
+          cp .github/tools/nova-apatch/使用说明.md ak3/
+          cd ak3
+          zip -qr ../output/PD2339-Nova-KernelPatch-AnyKernel3-debug.zip . -x '.git/*' '.github/*'
+          cd ..
+          unzip -tq output/PD2339-Nova-KernelPatch-AnyKernel3-debug.zip
+          cd output
+          sha256sum *.apk *.zip > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PD2339-Nova-KernelPatch-debug
+          path: output/*
+          if-no-files-found: error
+      - name: 保存构建失败日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nova-kernelpatch-build-diagnostics
+          path: |
+            nova/manager/app/build/reports/
+            nova/manager/app/.cxx/**/build_output.txt
+          if-no-files-found: ignore
