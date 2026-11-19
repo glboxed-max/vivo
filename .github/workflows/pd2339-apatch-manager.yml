@@ -1,0 +1,48 @@
+name: PD2339 APatch 管理器离线流程构建
+on:
+  workflow_dispatch:
+  push:
+    branches: [pd2339-apatch-manager-ci]
+    paths:
+      - '.github/tools/apply_apatch_manager_overlay.py'
+      - '.github/workflows/pd2339-apatch-manager.yml'
+permissions:
+  contents: read
+jobs:
+  build-manager:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: 检出固定的 APatch 管理器源码
+        uses: actions/checkout@v4
+        with:
+          repository: xianwan1314/APatch
+          ref: e8e4651c16fb5075882a25813c8732285fdb3505
+          fetch-depth: 0
+          persist-credentials: false
+          path: manager
+      - name: 接入并检查离线脚本
+        run: |
+          set -euo pipefail
+          python3 .github/tools/apply_apatch_manager_overlay.py manager
+          sh -n manager/app/src/main/assets/boot_patch.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: jetbrains
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 准备 Android SDK 和 Rust
+        run: |
+          set -euo pipefail
+          rustup target add aarch64-linux-android
+          cargo install cargo-ndk --locked
+      - name: 编译 Debug 管理器
+        working-directory: manager
+        run: bash gradlew --no-daemon assembleDebug
+      - name: 上传 Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PD2339-APatch-manager-debug
+          path: manager/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
