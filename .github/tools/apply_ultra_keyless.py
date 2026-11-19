@@ -154,12 +154,9 @@ home = java / "ui/screen/Home.kt"
 text = home.read_text(encoding="utf-8").replace("                if (checkUpdate) {\n                    UpdateCard()\n                }", "")
 assert "if (checkUpdate)" not in text
 home.write_text(text, encoding="utf-8")
-bottom = java / "ui/screen/BottomBarDestination.kt"
-text = bottom.read_text(encoding="utf-8")
-text = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("Module(ModuleScreenDestination,")) + "\n"
-bottom.write_text(text, encoding="utf-8")
 for path in (main / "java/zako").rglob("*.kt"):
     text = path.read_text(encoding="utf-8").replace("Natives.version >= Natives.MINIMAL_SUPPORTED_KPM", "Natives.isKPMEnabled()")
+    text = text.replace("BottomBarDestination.entries.forEach { destination ->", "BottomBarDestination.entries.forEach { destination ->\n            if (destination == BottomBarDestination.Module) return@forEach")
     path.write_text(text, encoding="utf-8")
 
 manifest = main / "AndroidManifest.xml"
