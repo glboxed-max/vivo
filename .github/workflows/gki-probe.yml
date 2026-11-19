@@ -1,15 +1,11 @@
 name: PD2339 Nova v3 内建接口试编
 
-# 目的：用「厂商设备的 /proc/config.gz」去编 AOSP 6.1.145 树（可叠加 BTF 反推的头文件补丁），
-#       产出 Image 后本地解析 __ksymtab/__kcrctab + BTF，与厂商模块逐项对比。
-#       全程无需刷机。
+# 基于已验证的 6.1.145 GKI 构建，检查 Nova 内建接口与编译结果。
 
 on:
   workflow_dispatch:
   push:
     branches: [pd2339-nova-builtin-ci]
-  push:
-    branches: [pd2339-gki-ci-20261118]
 
 permissions:
   contents: read
