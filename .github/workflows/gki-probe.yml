@@ -1,4 +1,4 @@
-name: GKI Stock Probe (原厂 gki_defconfig 基线)
+name: PD2339 Nova v3 内建接口试编
 
 # 目的：用「厂商设备的 /proc/config.gz」去编 AOSP 6.1.145 树（可叠加 BTF 反推的头文件补丁），
 #       产出 Image 后本地解析 __ksymtab/__kcrctab + BTF，与厂商模块逐项对比。
@@ -6,6 +6,8 @@ name: GKI Stock Probe (原厂 gki_defconfig 基线)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [pd2339-nova-builtin-ci]
   push:
     branches: [pd2339-gki-ci-20261118]
 
@@ -41,6 +43,29 @@ jobs:
           version: android14-6.1
           os_patch_level: '2025-09'
 
+      - name: 检出 Nova v3.0.0 源码
+        uses: actions/checkout@v4
+        with:
+          repository: SukiSU-Nova/SukiSU-Nova
+          ref: c60f21b9e00e35e898f8d21e0612465b76b9beec
+          path: nova
+          persist-credentials: false
+
+      - name: 内建 Nova Root 与 KPM 桥接
+        working-directory: kernel/common
+        run: |
+          set -euo pipefail
+          test "$(git -C "$GITHUB_WORKSPACE/nova" rev-parse HEAD)" = c60f21b9e00e35e898f8d21e0612465b76b9beec
+          grep -qx 'SUBLEVEL = 145' Makefile
+          test ! -e drivers/kernelsu
+          # 保留上游 Kbuild 和接口，展开 UAPI 目录以便 Kleaf 收集文件。
+          mkdir drivers/kernelsu
+          cp -aL "$GITHUB_WORKSPACE/nova/kernel/." drivers/kernelsu/
+          printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
+          sed -i '/^endmenu$/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          test "$(grep -Fxc 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig)" = 1
+          scripts/config --file arch/arm64/configs/gki_defconfig -e KSU -e KPM -e KALLSYMS_ALL
+
       - name: 关掉 WERROR（-Warray-bounds 会误伤，且不影响 ABI）
         run: |
           set -euo pipefail
@@ -59,7 +84,7 @@ jobs:
           for i in 1 2 3 4; do
             echo "===== Bazel 构建 第 $i 次 ====="
             if tools/bazel build --config=fast --notrim --disk_cache=/home/runner/.cache/bazel \
-                 //common:kernel_aarch64/Image > /tmp/bazel.log 2>&1; then
+                 //common:kernel_aarch64/Image //common:kernel_aarch64/vmlinux > /tmp/bazel.log 2>&1; then
               ok=1; break
             fi
             echo "----- 真实 error 行（最多 40 条）-----"
@@ -87,14 +112,22 @@ jobs:
             [ -f "$c" ] && IMG="$c" && break
           done
           [ -n "$IMG" ] || { echo "找不到 Image"; find . -name Image -path '*kernel_aarch64*' | head; exit 1; }
+          common/scripts/extract-ikconfig "$IMG" > "$GITHUB_WORKSPACE/AnyKernel3/effective.config"
+          for option in CONFIG_KSU CONFIG_KPM CONFIG_KALLSYMS_ALL; do
+            grep -Fx "$option=y" "$GITHUB_WORKSPACE/AnyKernel3/effective.config"
+          done
+          readelf --wide --symbols "$(dirname "$IMG")/vmlinux" > "$RUNNER_TEMP/nova-kernel-symbols"
+          grep -E '[[:space:]]sukisu_kpm_bridge$' "$RUNNER_TEMP/nova-kernel-symbols"
+          grep -E '[[:space:]]ksu_extension_kpm_io$' "$RUNNER_TEMP/nova-kernel-symbols"
+          grep -E '[[:space:]]kernelsu_init$' "$RUNNER_TEMP/nova-kernel-symbols"
           cp "$IMG" "$GITHUB_WORKSPACE/AnyKernel3/Image"
-          ls -l "$GITHUB_WORKSPACE/AnyKernel3/Image"
-          strings "$GITHUB_WORKSPACE/AnyKernel3/Image" | grep -m1 "SMP preempt mod_unload" || true
 
       - name: 上传 Image
         uses: actions/upload-artifact@v4
         with:
-          name: gki-Image
-          path: ${{ github.workspace }}/AnyKernel3/Image
+          name: pd2339-nova-builtin-diagnostic
+          path: |
+            ${{ github.workspace }}/AnyKernel3/Image
+            ${{ github.workspace }}/AnyKernel3/effective.config
           if-no-files-found: error
           compression-level: 0
