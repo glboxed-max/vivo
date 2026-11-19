@@ -5,6 +5,7 @@ on:
     branches: [pd2339-nova-v3-ci]
     paths:
       - '.github/tools/verify_nova_release.py'
+      - '.github/tools/apply_nova_ui_overlay.py'
       - '.github/workflows/pd2339-nova-v3.yml'
 permissions:
   contents: read
@@ -14,6 +15,15 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - name: 检出 Nova v3.0.0 源码
+        uses: actions/checkout@v4
+        with:
+          repository: SukiSU-Nova/SukiSU-Nova
+          ref: c60f21b9e00e35e898f8d21e0612465b76b9beec
+          path: nova
+          persist-credentials: false
+      - name: 应用并校验中文界面文案
+        run: python3 .github/tools/apply_nova_ui_overlay.py nova
       - name: 核验 Nova 同版 ARM64 发布物
         env:
           GH_TOKEN: ${{ github.token }}
