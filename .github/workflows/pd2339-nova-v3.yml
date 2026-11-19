@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/tools/verify_nova_release.py'
       - '.github/tools/apply_nova_ui_overlay.py'
+      - '.github/tools/apply_nova_boot_overlay.py'
       - '.github/workflows/pd2339-nova-v3.yml'
 permissions:
   contents: read
@@ -24,6 +25,11 @@ jobs:
           persist-credentials: false
       - name: 应用并校验中文界面文案
         run: python3 .github/tools/apply_nova_ui_overlay.py nova
+      - name: 接入并校验启动镜像输入和输出检查
+        run: |
+          set -euo pipefail
+          python3 .github/tools/apply_nova_boot_overlay.py nova
+          git -C nova diff --check
       - name: 核验 Nova 同版 ARM64 发布物
         env:
           GH_TOKEN: ${{ github.token }}
