@@ -1,0 +1,28 @@
+name: PD2339 Nova v3 发布依赖校验
+on:
+  workflow_dispatch:
+  push:
+    branches: [pd2339-nova-v3-ci]
+    paths:
+      - '.github/tools/verify_nova_release.py'
+      - '.github/workflows/pd2339-nova-v3.yml'
+permissions:
+  contents: read
+jobs:
+  verify-nova:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: 核验 Nova 同版 ARM64 发布物
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/tools/verify_nova_release.py "$RUNNER_TEMP/nova-v3"
+      - name: 检查 LKM 内的 KPM 桥接
+        run: |
+          set -euo pipefail
+          module="$RUNNER_TEMP/nova-v3/lkm-aarch64-android14-6.1_kernelsu.ko"
+          readelf --wide --symbols "$module" > "$RUNNER_TEMP/nova-symbols.txt"
+          grep -E '[[:space:]]sukisu_kpm_bridge$' "$RUNNER_TEMP/nova-symbols.txt"
+          grep -E '[[:space:]]ksu_extension_kpm_io$' "$RUNNER_TEMP/nova-symbols.txt"
+          echo '已确认桥接。内核侧后端、ABI 和启动尚需验证。'
