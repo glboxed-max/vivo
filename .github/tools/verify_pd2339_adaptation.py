@@ -27,6 +27,13 @@ assert 'FOLDER = "西努鲁"' in download
 assert "MediaStore.Downloads.EXTERNAL_CONTENT_URI" in download
 assert "backupLivePartitions" in download
 
+assert "RootAccess.acquire(" in (backend / "BootPatcher.kt").read_text(encoding="utf-8")
+assert "RootAccess.acquire(" in (backend / "InitBootContent.kt").read_text(encoding="utf-8")
+root = (backend / "RootAccess.kt").read_text(encoding="utf-8")
+assert "createRootShell()" in root and "PairingSession.ready" in root
+cli = (main / "java/com/sukisu/ultra/ui/util/KsuCli.kt").read_text(encoding="utf-8")
+assert "builder.build(\"su\")" in cli and "getRootShell().isRoot" in cli
+
 manifest = (main / "AndroidManifest.xml").read_text(encoding="utf-8")
 assert 'android.permission.WRITE_EXTERNAL_STORAGE' in manifest
 

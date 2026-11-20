@@ -5,7 +5,6 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import com.topjohnwu.superuser.Shell
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,9 +62,10 @@ object DownloadStore {
 
     /** Backs up the live boot and init_boot when a root shell is available. */
     fun backupLivePartitions(): String? = runCatching {
-        val shell = if (PairingSession.ready) PairingSession.rootShell(fresh = true) else Shell.getShell()
-        if (!shell.isRoot) return null
-        val slot = PartitionBackup.slot(shell)
-        PartitionBackup.backup(shell, slot, "修补 boot 前自动备份")
+        val session = RootAccess.acquire(fresh = true)
+        session.shell.use { shell ->
+            val slot = PartitionBackup.slot(shell)
+            PartitionBackup.backup(shell, slot, "修补 boot 前自动备份")
+        }
     }.getOrNull()
 }

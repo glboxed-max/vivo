@@ -76,7 +76,7 @@ edit(java / 'ui/util/KsuCli.kt', lambda t: body(body(t, 'private fun getKsuDaemo
     val result = getRootShell().newJob().add("${{getKsuDaemonPath()}} module list").exec()
     check(result.isSuccess) {{ "读取用户态模块失败 (${{result.code}})" }}
     return result.out.joinToString("\\n")'''))
-edit(ultra / 'manager/build.gradle.kts', lambda t: t.replace('extra(3000201)', 'extra(3000206)'))
+edit(ultra / 'manager/build.gradle.kts', lambda t: t.replace('extra(3000201)', 'extra(3000207)'))
 edit(ultra / 'manager/app/build.gradle.kts', lambda t: t.replace('useLegacyPackaging = true', 'useLegacyPackaging = true\n            keepDebugSymbols += setOf("**/libapd.so", "**/libbusybox.so", "**/libmagiskboot.so", "**/libkptools.so")'))
 
 # Root permission ownership remains in Ultra's encrypted, package-pinned vault.

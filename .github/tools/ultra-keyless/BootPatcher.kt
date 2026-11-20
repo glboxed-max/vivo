@@ -101,7 +101,7 @@ object BootPatcher {
     data class FlashResult(val image: File, val backup: String)
 
     @Synchronized
-    fun flashCurrent(context: Context, vivoBlock: Boolean = true): FlashResult = PairingSession.rootShell(fresh = true).use { shell ->
+    fun flashCurrent(context: Context, vivoBlock: Boolean = true): FlashResult = RootAccess.acquire(fresh = true).shell.use { shell ->
         val slot = PartitionBackup.slot(shell)
         val partition = "/dev/block/by-name/boot$slot"
         val directory = File(context.filesDir, "patches/${java.util.UUID.randomUUID()}").apply { check(mkdirs()) }

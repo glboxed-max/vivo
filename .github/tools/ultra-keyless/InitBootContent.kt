@@ -114,11 +114,12 @@ fun InitBootCard() {
                 operation {
                     val image = if (inspection?.let { it.hasKernelsu || it.initIsWrapper } == true) ensureStripped()
                         else selected ?: error("请先选择 init_boot.img")
-                    val backup = PairingSession.rootShell(fresh = true).use { shell ->
+                    val session = RootAccess.acquire(fresh = true)
+                    val backup = session.shell.use { shell ->
                         val slot = PartitionBackup.slot(shell)
                         PartitionBackup.flash(shell, slot, "init_boot", image)
                     }
-                    "init_boot 写入和读回校验完成。原厂备份位于手机 $backup"
+                    "init_boot 写入和读回校验完成（Root 来源：${session.source}）。原厂备份位于手机 $backup"
                 }
             }) { Text("确认刷入") }
         },
