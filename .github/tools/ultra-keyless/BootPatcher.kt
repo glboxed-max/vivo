@@ -34,7 +34,6 @@ object BootPatcher {
     @Synchronized
     fun patch(context: Context, original: File, directory: File): File {
         validate(original)
-        val key = PairingSession.patchCredential()
         val before = hash(original)
         val core = File(directory, "kpimg")
         context.assets.open("pairing/kpimg").use { stream -> core.outputStream().use { stream.copyTo(it) } }
@@ -42,15 +41,15 @@ object BootPatcher {
         val log = File(directory, "patch.log")
         val process = ProcessBuilder(File(context.applicationInfo.nativeLibraryDir, "libkptools.so").absolutePath,
             "-p", "-i", original.absolutePath, "-k", core.absolutePath,
-            "--root-skey-fd", "0", "-o", output.absolutePath)
+            "-o", output.absolutePath)
             .directory(directory).redirectErrorStream(true).redirectOutput(log).start()
-        process.outputStream.bufferedWriter().use { it.write(key); it.newLine() }
+        process.outputStream.close()
         val rc = process.waitFor()
         check(rc == 0 && output.isFile) { "修补失败 ($rc)，请导出日志检查" }
         check(hash(original) == before) { "原镜像校验失败" }
         validate(output)
         check(output.length() == original.length()) { "修补后镜像长度变化，停止刷入" }
-        val meta = JSONObject().put("pairingFingerprint", PairingSession.fingerprint()).put("sourceSha256", before).put("patchedSha256", hash(output))
+        val meta = JSONObject().put("sourceSha256", before).put("patchedSha256", hash(output))
         File(directory, "metadata.json").writeText(meta.toString())
         return output
     }
@@ -58,7 +57,6 @@ object BootPatcher {
     @Synchronized
     fun exportInstaller(context: Context, patched: File, destination: java.io.OutputStream) {
         val metadata = JSONObject(File(patched.parentFile, "metadata.json").readText())
-        check(metadata.getString("pairingFingerprint") == PairingSession.fingerprint()) { "配对已变化，请重新修补 boot" }
         check(hash(patched) == metadata.getString("patchedSha256")) { "修补镜像摘要已变化" }
         ZipOutputStream(destination.buffered()).use { output ->
             ZipInputStream(context.assets.open("pairing/AnyKernel3-template.zip")).use { template ->
@@ -83,9 +81,6 @@ object BootPatcher {
             output.closeEntry()
         }
     }
-
-    @Synchronized
-    fun restorePairing(archive: ByteArray, password: CharArray) = PairingSession.restore(archive, password)
 
     @Synchronized
     fun flashCurrent(context: Context): File = PairingSession.rootShell(fresh = true).use { shell ->

@@ -7,7 +7,6 @@ import android.util.AtomicFile
 import java.io.File
 import java.security.KeyStore
 import java.security.MessageDigest
-import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -28,7 +27,7 @@ class PairingVault(private val context: Context) {
         val alias = "UltraKernelPatchPairingV1-$id"
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         if (store.containsAlias(alias)) return store.getKey(alias, null) as SecretKey
-        check(create) { "本机配对密钥已丢失，请恢复加密配对备份" }
+        check(create) { "授权记录存储无法读取" }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         generator.init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
@@ -40,9 +39,7 @@ class PairingVault(private val context: Context) {
     @Synchronized
     fun read(): JSONObject {
         if (!storage.baseFile.exists() && !File(storage.baseFile.path + ".bak").exists()) {
-            val bytes = ByteArray(24).also { SecureRandom().nextBytes(it) }
             val value = JSONObject().put("version", 1)
-                .put("credential", bytes.joinToString("") { "%02x".format(it) })
                 .put("grants", JSONObject())
             write(value)
             return value
@@ -53,6 +50,10 @@ class PairingVault(private val context: Context) {
         cipher.init(Cipher.DECRYPT_MODE, encryptionKey(id, false), GCMParameterSpec(128, sealed.copyOfRange(36, 48)))
         val value = JSONObject(String(cipher.doFinal(sealed.copyOfRange(48, sealed.size)), Charsets.UTF_8))
         validate(value)
+        if (value.has("credential")) {
+            value.remove("credential")
+            write(value)
+        }
         return value
     }
 
@@ -79,7 +80,6 @@ class PairingVault(private val context: Context) {
 
     fun validate(value: JSONObject) {
         require(value.getInt("version") == 1) { "不支持的配对版本" }
-        require(value.getString("credential").matches(Regex("[0-9a-f]{48}"))) { "配对凭证无效" }
         val grants = value.getJSONObject("grants")
         require(grants.length() <= 4096)
         for (key in grants.keys()) {

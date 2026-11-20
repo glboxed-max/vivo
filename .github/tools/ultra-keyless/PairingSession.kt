@@ -6,14 +6,12 @@ import android.content.Intent
 import com.sukisu.ultra.Natives.Profile
 import com.topjohnwu.superuser.Shell
 import java.util.concurrent.FutureTask
-import java.security.MessageDigest
 import me.bmax.apatch.BackendSession
 import me.bmax.apatch.Natives as AP
 import org.json.JSONObject
 
 object PairingSession {
     private lateinit var vault: PairingVault
-    private var credential = ""
     private var cachedShell: Shell? = null
     @Volatile var error: String? = null
         private set
@@ -24,12 +22,11 @@ object PairingSession {
         try {
             if (!::vault.isInitialized) vault = PairingVault(context.applicationContext)
             BackendSession.clear()
-            credential = vault.read().getString("credential")
+            vault.read()
             error = null
-            BackendSession.authenticate(credential)
+            BackendSession.connectManager()
         } catch (failure: Exception) {
             BackendSession.clear()
-            credential = ""
             error = failure.message ?: "读取配对数据失败"
         }
         if (ready) {
@@ -38,15 +35,6 @@ object PairingSession {
             }
         }
     }
-
-    @Synchronized
-    fun patchCredential(): String {
-        check(credential.isNotEmpty()) { error ?: "配对尚未初始化" }
-        return credential
-    }
-
-    fun fingerprint(): String = MessageDigest.getInstance("SHA-256")
-        .digest(patchCredential().toByteArray(Charsets.US_ASCII)).joinToString("") { "%02x".format(it) }
 
     fun version(): Long = if (ready) AP.kernelPatchVersion() else 0
 
@@ -129,7 +117,7 @@ object PairingSession {
 
     @Synchronized
     fun adoptCurrentGrants(context: Context) {
-        check(ready) { "请先完成内核配对" }
+        check(ready) { "请先安装支持此管理器的内核补丁" }
         val state = vault.read()
         val grants = state.getJSONObject("grants")
         for (uid in AP.suUids()) {
@@ -144,24 +132,9 @@ object PairingSession {
     }
 
     @Synchronized
-    fun backup(password: CharArray): ByteArray = PairingArchive.seal(vault.read().toString().toByteArray(Charsets.UTF_8), password)
-
-    @Synchronized
-    fun restore(archive: ByteArray, password: CharArray) {
-        val value = JSONObject(String(PairingArchive.open(archive, password), Charsets.UTF_8))
-        vault.validate(value)
-        check(!ready || AP.nativeReady(value.getString("credential"))) { "备份与当前内核不匹配" }
-        vault.write(value, newKey = true)
-        BackendSession.clear()
-        credential = value.getString("credential")
-        if (BackendSession.authenticate(credential)) restoreGrants()
-        error = null
-    }
-
-    @Synchronized
     fun rootShell(fresh: Boolean = false): Shell {
         if (!fresh && ready && cachedShell?.isAlive == true) return cachedShell!!
-        check(ready) { "当前内核尚未与管理器配对" }
+        check(ready) { "当前内核未授予此管理器访问权限" }
         val operation = FutureTask<Shell> {
             check(AP.su()) { "取得 KernelPatch Root 失败" }
             val shell = Shell.Builder.create().build("/system/bin/sh")

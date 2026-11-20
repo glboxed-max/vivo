@@ -12,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -30,10 +29,6 @@ fun PairingInstallContent(onBack: () -> Unit) {
     var patched by remember { mutableStateOf<File?>(null) }
     var ready by remember { mutableStateOf(PairingSession.ready) }
     var confirmFlash by remember { mutableStateOf(false) }
-    var passwordMode by remember { mutableStateOf<String?>(null) }
-    var password by remember { mutableStateOf("") }
-    var importUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingBackup by remember { mutableStateOf<ByteArray?>(null) }
 
     fun operation(action: suspend () -> String) {
         if (busy) return
@@ -74,23 +69,8 @@ fun PairingInstallContent(onBack: () -> Unit) {
             "已导出与本管理器配对的 AnyKernel3 包"
         }
     }
-    val saveBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        val archive = pendingBackup
-        pendingBackup = null
-        if (uri != null && archive != null) operation {
-            context.contentResolver.openOutputStream(uri, "w")!!.use { it.write(archive) }
-            "加密配对备份已导出，请保存备份密码"
-        }
-    }
-    val chooseBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            importUri = uri
-            passwordMode = "restore"
-        }
-    }
-
     Scaffold(topBar = {
-        TopAppBar(title = { Text("安装与配对") }, navigationIcon = {
+        TopAppBar(title = { Text("安装与修补") }, navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
         })
     }) { padding ->
@@ -99,8 +79,8 @@ fun PairingInstallContent(onBack: () -> Unit) {
             LiquidGlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("SukiSU Ultra · 调试版本", style = MaterialTheme.typography.titleLarge)
-                    Text(if (ready) "已自动连接 ${PairingSession.versionText()}" else "尚未安装本管理器配对的内核")
-                    Text("管理凭证自动生成并由 Android Keystore 加密保存，正常修补和授权无需输入密钥。")
+                    Text(if (ready) "已自动连接 ${PairingSession.versionText()}" else "未识别到支持此管理器的内核补丁")
+                    Text("无需 SuperKey 或本机配对。内核自动识别此管理器，提供 Root 授权与 KPM 管理。")
                 }
             }
             LiquidGlassCard(Modifier.fillMaxWidth()) {
@@ -135,16 +115,8 @@ fun PairingInstallContent(onBack: () -> Unit) {
             LiquidGlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("直接刷入", style = MaterialTheme.typography.titleLarge)
-                    Text("已有本管理器配对的 KernelPatch Root 时，可备份并修补当前槽位 boot 后写回。")
+                    Text("已识别到此管理器的 Root 时，可备份并修补当前槽位 boot 后写回。")
                     Button(enabled = !busy && ready, onClick = { confirmFlash = true }) { Text("修补并刷入当前槽位") }
-                }
-            }
-            LiquidGlassCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("配对备份", style = MaterialTheme.typography.titleLarge)
-                    Text("卸载或清除数据会丢失本机配对。请导出加密备份，恢复时才需要备份密码。")
-                    OutlinedButton(enabled = !busy, onClick = { passwordMode = "backup" }) { Text("备份配对") }
-                    OutlinedButton(enabled = !busy, onClick = { chooseBackup.launch(arrayOf("*/*")) }) { Text("恢复配对") }
                 }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -166,53 +138,5 @@ fun PairingInstallContent(onBack: () -> Unit) {
             }) { Text("确认刷入") }
         },
         dismissButton = { TextButton(onClick = { confirmFlash = false }) { Text("取消") } },
-    )
-    if (passwordMode != null) AlertDialog(
-        onDismissRequest = { passwordMode = null; password = "" },
-        title = { Text(if (passwordMode == "backup") "加密配对备份" else "恢复配对") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(if (passwordMode == "backup") "设置至少 12 字符的备份密码。此密码只用于备份恢复。"
-                    else "输入备份密码。确认后会替换本机保存的配对数据并恢复有效的应用授权。")
-                OutlinedTextField(password, { password = it }, label = { Text("备份密码") },
-                    visualTransformation = PasswordVisualTransformation(), singleLine = true)
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = password.length >= 12, onClick = {
-                val mode = passwordMode
-                val secret = password.toCharArray()
-                password = ""
-                passwordMode = null
-                if (mode == "backup") {
-                    scope.launch {
-                        busy = true
-                        try {
-                            pendingBackup = withContext(Dispatchers.IO) { PairingSession.backup(secret) }
-                            saveBackup.launch("Ultra-Pairing.ukpair")
-                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                            throw cancelled
-                        } catch (failure: Exception) {
-                            message = failure.message ?: "备份失败"
-                        } finally {
-                            secret.fill('\u0000')
-                            busy = false
-                        }
-                    }
-                } else {
-                    val uri = importUri!!
-                    operation {
-                        try {
-                            val archive = context.contentResolver.openInputStream(uri)!!.use {
-                                PairingArchive.read(it)
-                            }
-                            BootPatcher.restorePairing(archive, secret)
-                            "配对已恢复。${if (PairingSession.ready) "已连接内核" else "请使用本配对重新修补 boot"}"
-                        } finally { secret.fill('\u0000') }
-                    }
-                }
-            }) { Text(if (passwordMode == "backup") "加密并导出" else "确认恢复") }
-        },
-        dismissButton = { TextButton(onClick = { passwordMode = null; password = "" }) { Text("取消") } },
     )
 }

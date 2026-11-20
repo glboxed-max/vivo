@@ -33,7 +33,7 @@ object ModuleRuntime {
 
     /** Only called after the owner confirms backend installation in the UI. */
     fun install(context: Context) {
-        check(PairingSession.ready) { "请先完成内核配对" }
+        check(PairingSession.ready) { "请先安装支持此管理器的内核补丁" }
         PairingSession.adoptCurrentGrants(context)
         val info = expected(context)
         val native = context.applicationInfo.nativeLibraryDir

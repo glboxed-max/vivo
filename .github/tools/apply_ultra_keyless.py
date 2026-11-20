@@ -24,6 +24,8 @@ templates = Path(__file__).parent / "ultra-keyless"
 backend = java / "backend"
 backend.mkdir(parents=True, exist_ok=True)
 for template in templates.glob("*.kt"):
+    if template.name == "PairingArchive.kt":
+        continue
     shutil.copyfile(template, backend / template.name)
 
 ap = main / "java/me/bmax/apatch"
@@ -39,9 +41,13 @@ assert "APApplication" not in native
 object BackendSession {
     @Volatile var superKey: String = ""
         private set
-    fun authenticate(value: String): Boolean {
-        if (value.isEmpty() || !Natives.nativeReady(value)) return false
-        superKey = value
+    fun connectManager(): Boolean {
+        // "su" is a non-secret protocol marker. KernelPatch identifies the caller.
+        superKey = "su"
+        if (!Natives.nativeReady("su") || Natives.kernelPatchModuleNum() < 0) {
+            clear()
+            return false
+        }
         return true
     }
     fun clear() { superKey = "" }
@@ -219,7 +225,4 @@ text = app_gradle.read_text(encoding="utf-8").replace('namespace = "com.sukisu.u
     }''')
 text = text.replace("dependencies {", 'dependencies {\n    testImplementation("junit:junit:4.13.2")', 1)
 app_gradle.write_text(text, encoding="utf-8")
-tests = args.ultra / "manager/app/src/test/java/com/sukisu/ultra/backend"
-tests.mkdir(parents=True, exist_ok=True)
-shutil.copyfile(templates / "PairingArchiveTest.java", tests / "PairingArchiveTest.java")
-print("Ultra 3.x original pages now use the paired KernelPatch backend")
+print("Ultra trusted-manager backend connected without SuperKey pairing")

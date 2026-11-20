@@ -46,7 +46,7 @@ jobs:
           gh release download 0.13.9 -R bmax121/KernelPatch -p kpimg-android -p kptools-android -D components
           echo 'eb2e3d16fe69410150efcf6f9425baf8cad9ac0c39f051fc8b40ce57c7143adb  components/kpimg-android' | sha256sum -c
           echo '63a8656a79b74baadcf0ce57a7e89a8c8a94beb35b25df58aec0bcf1d066bc5b  components/kptools-android' | sha256sum -c
-          cp components/kpimg-android ultra/manager/app/src/main/assets/pairing/kpimg
+          python3 .github/tools/prepare_ultra_manager_kpimg.py components/kpimg-android ultra/manager/app/src/main/assets/pairing/kpimg
           cp components/kptools-android ultra/manager/app/src/main/jniLibs/arm64-v8a/libkptools.so
           cp .github/tools/ultra-paired-anykernel.sh ak3/anykernel.sh
           cp .github/tools/ultra-keyless/使用说明.md ak3/
