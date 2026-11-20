@@ -5,6 +5,7 @@ on:
     branches: [pd2339-ultra-keyless-ci]
 permissions:
   contents: read
+  actions: read
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -22,6 +23,7 @@ jobs:
         with:
           repository: xianwan1314/APatch
           ref: e8e4651c16fb5075882a25813c8732285fdb3505
+          fetch-depth: 0
           persist-credentials: false
           path: apatch
       - uses: actions/checkout@v4
@@ -33,6 +35,7 @@ jobs:
       - name: 接入 Ultra 原始页面与自动配对后端
         run: |
           python3 .github/tools/apply_ultra_keyless.py ultra apatch
+          python3 .github/tools/ultra_ui_modules.py ultra apatch
           git -C ultra diff --check
           sh -n .github/tools/ultra-paired-anykernel.sh
       - name: 准备内置修补工具和 AnyKernel3 模板
@@ -56,6 +59,39 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apatch/apd
+          key: ultra-modules-ndk29-v1
+      - name: 编译独立用户态模块后端
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/29.0.14206865
+        run: |
+          sdkmanager 'ndk;29.0.14206865' >/dev/null
+          cargo install cargo-ndk --locked
+          cd apatch/apd
+          cargo ndk -t arm64-v8a build --release --locked
+          cd ../..
+          cp apatch/apd/target/aarch64-linux-android/release/apd ultra/manager/app/src/main/jniLibs/arm64-v8a/libapd.so
+          gh run download 44482731236 -R glboxed-max/vivo -n PD2339-APatch-manager-debug -D components/apatch-runtime
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, zipfile
+          apk = next(Path('components/apatch-runtime').rglob('*.apk'))
+          with zipfile.ZipFile(apk) as archive:
+              busybox = archive.read('lib/arm64-v8a/libbusybox.so')
+          digest = hashlib.sha256(busybox).hexdigest()
+          assert digest == '4d60ab3f5a59ebb2ca863f2f514e6924401b581e9b64f602665c008177626651'
+          native = Path('ultra/manager/app/src/main/jniLibs/arm64-v8a')
+          (native / 'libbusybox.so').write_bytes(busybox)
+          assets = Path('ultra/manager/app/src/main/assets/modules')
+          assets.mkdir(parents=True, exist_ok=True)
+          (assets / 'runtime-info.json').write_text(json.dumps({'apdSha256': hashlib.sha256((native / 'libapd.so').read_bytes()).hexdigest(), 'busyboxSha256': digest}), encoding='utf-8')
+          PY
       - name: 准备稳定构建签名
         env:
           SIGNING_STORE: ${{ secrets.ULTRA_PD2339_KEYSTORE }}

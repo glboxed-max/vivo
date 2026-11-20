@@ -128,6 +128,22 @@ object PairingSession {
     }
 
     @Synchronized
+    fun adoptCurrentGrants(context: Context) {
+        check(ready) { "请先完成内核配对" }
+        val state = vault.read()
+        val grants = state.getJSONObject("grants")
+        for (uid in AP.suUids()) {
+            if (grants.has(uid.toString())) continue
+            val name = context.packageManager.getPackagesForUid(uid)?.firstOrNull() ?: continue
+            val identity = vault.identity(name)
+            check(identity.getInt("uid") == uid) { "授权 UID 已改变" }
+            val profile = AP.suProfile(uid)
+            grants.put(uid.toString(), identity.put("toUid", profile.toUid).put("context", profile.scontext))
+        }
+        vault.write(state)
+    }
+
+    @Synchronized
     fun backup(password: CharArray): ByteArray = PairingArchive.seal(vault.read().toString().toByteArray(Charsets.UTF_8), password)
 
     @Synchronized
