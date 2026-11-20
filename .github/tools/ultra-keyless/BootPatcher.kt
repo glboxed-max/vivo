@@ -32,24 +32,34 @@ object BootPatcher {
     }
 
     @Synchronized
-    fun patch(context: Context, original: File, directory: File): File {
+    fun patch(context: Context, original: File, directory: File, vivoBlock: Boolean = true): File {
         validate(original)
         val before = hash(original)
         val core = File(directory, "kpimg")
         context.assets.open("pairing/kpimg").use { stream -> core.outputStream().use { stream.copyTo(it) } }
         val output = File(directory, "patched-boot.img")
         val log = File(directory, "patch.log")
-        val process = ProcessBuilder(File(context.applicationInfo.nativeLibraryDir, "libkptools.so").absolutePath,
-            "-p", "-i", original.absolutePath, "-k", core.absolutePath,
-            "-o", output.absolutePath)
+        val command = mutableListOf(
+            File(context.applicationInfo.nativeLibraryDir, "libkptools.so").absolutePath,
+            "-p", "-i", original.absolutePath, "-k", core.absolutePath, "-o", output.absolutePath,
+        )
+        if (vivoBlock) {
+            val kpm = File(directory, "vr_module_blocker.kpm")
+            context.assets.open("pairing/vr_module_blocker.kpm").use { stream ->
+                kpm.outputStream().use { stream.copyTo(it) }
+            }
+            command += listOf("-M", kpm.absolutePath, "-T", "kpm", "-N", "vr_module_blocker", "-V", "pre-kernel-init")
+        }
+        val process = ProcessBuilder(command)
             .directory(directory).redirectErrorStream(true).redirectOutput(log).start()
         process.outputStream.close()
         val rc = process.waitFor()
         check(rc == 0 && output.isFile) { "修补失败 ($rc)，请导出日志检查" }
         check(hash(original) == before) { "原镜像校验失败" }
         validate(output)
-        check(output.length() == original.length()) { "修补后镜像长度变化，停止刷入" }
+        check(output.length() in 4096L..(original.length() + 1_048_576L)) { "修补后镜像长度异常，停止刷入" }
         val meta = JSONObject().put("sourceSha256", before).put("patchedSha256", hash(output))
+            .put("vivoBlock", vivoBlock)
         File(directory, "metadata.json").writeText(meta.toString())
         return output
     }
@@ -82,27 +92,30 @@ object BootPatcher {
         }
     }
 
+    data class FlashResult(val image: File, val backup: String)
+
     @Synchronized
-    fun flashCurrent(context: Context): File = PairingSession.rootShell(fresh = true).use { shell ->
-        val slotResult = shell.newJob().add("getprop ro.boot.slot_suffix").exec()
-        check(slotResult.isSuccess) { "读取槽位失败" }
-        val slot = slotResult.out.joinToString("").trim()
-        require(slot in listOf("", "_a", "_b")) { "槽位不受支持" }
+    fun flashCurrent(context: Context, vivoBlock: Boolean = true): FlashResult = PairingSession.rootShell(fresh = true).use { shell ->
+        val slot = PartitionBackup.slot(shell)
         val partition = "/dev/block/by-name/boot$slot"
         val directory = File(context.filesDir, "patches/${java.util.UUID.randomUUID()}").apply { check(mkdirs()) }
         val original = File(directory, "original-boot.img")
+        val backup = PartitionBackup.backup(shell, slot, "写入 boot 前备份")
         check(shell.newJob().add("dd if=$partition of=${original.absolutePath} bs=4096").exec().isSuccess) { "备份当前 boot 失败" }
         val originalHash = hash(original)
-        val patched = patch(context, original, directory)
+        val patched = patch(context, original, directory, vivoBlock)
         val unchanged = shell.newJob().add("sha256sum $partition").exec()
         check(unchanged.isSuccess && unchanged.out.firstOrNull()?.startsWith(originalHash) == true) { "当前 boot 已变化，停止刷入" }
+        val sizeResult = shell.newJob().add("blockdev --getsize64 $partition 2>/dev/null").exec()
+        val partitionSize = sizeResult.out.firstOrNull()?.trim()?.toLongOrNull()
+        check(partitionSize == null || patched.length() <= partitionSize) { "修补镜像大于 boot 分区，停止刷入" }
         check(shell.newJob().add("dd if=${patched.absolutePath} of=$partition bs=4096 conv=fsync").exec().isSuccess) {
-            "写入失败，备份位于 ${original.absolutePath}"
+            "写入失败，原厂备份位于手机 $backup"
         }
-        val verify = shell.newJob().add("sha256sum $partition").exec()
+        val verify = shell.newJob().add("head -c ${patched.length()} $partition | sha256sum").exec()
         check(verify.isSuccess && verify.out.firstOrNull()?.startsWith(hash(patched)) == true) {
-            "写入读回校验失败，备份位于 ${original.absolutePath}"
+            "写入读回校验失败，原厂备份位于手机 $backup"
         }
-        patched
+        FlashResult(patched, backup)
     }
 }

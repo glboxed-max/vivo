@@ -28,6 +28,13 @@ jobs:
           path: apatch
       - uses: actions/checkout@v4
         with:
+          repository: bmax121/KernelPatch
+          ref: 0.13.9
+          fetch-depth: 1
+          persist-credentials: false
+          path: kp
+      - uses: actions/checkout@v4
+        with:
           repository: WildKernels/AnyKernel3
           ref: e1e9dce98430c5c6f231f7094a8c7f4ecaf50948
           persist-credentials: false
@@ -55,6 +62,23 @@ jobs:
           zip -qr ../output/Ultra-Paired-AnyKernel3-template.zip . -x '.git/*' '.github/*'
           cd ..
           cp output/Ultra-Paired-AnyKernel3-template.zip ultra/manager/app/src/main/assets/pairing/AnyKernel3-template.zip
+      - name: 编译 vivo 反 SU KPM
+        run: |
+          curl -fL -o "$RUNNER_TEMP/toolchain.tar.xz" https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz
+          tar -xJf "$RUNNER_TEMP/toolchain.tar.xz" -C "$RUNNER_TEMP"
+          make -C .github/tools/kpm KP_DIR="$PWD/kp" TARGET_COMPILE="$RUNNER_TEMP/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf/bin/aarch64-none-elf-"
+          readelf -S .github/tools/kpm/vr_module_blocker.kpm | grep -q '\.kpm\.init'
+          readelf -s .github/tools/kpm/vr_module_blocker.kpm | grep -q 'kallsyms_lookup_name'
+          allowed='^(kallsyms_lookup_name|hook_syscalln|unhook_syscalln|has_syscall_wrapper|printk|kf_memcmp|kf_memchr|kf_memcpy|kf_memmove|kf_memset|kf_strcmp|kf_strncmp|kf_strlen|kf_strnlen)$'
+          bad=$(readelf -sW .github/tools/kpm/vr_module_blocker.kpm | awk '$7=="UND" && $8!="" {print $8}' | sort -u | grep -Ev "$allowed" || true)
+          if [ -n "$bad" ]; then echo "unexpected undefined symbols:"; echo "$bad"; exit 1; fi
+          cp .github/tools/kpm/vr_module_blocker.kpm ultra/manager/app/src/main/assets/pairing/vr_module_blocker.kpm
+      - name: 准备 Magiskboot
+        run: |
+          curl -fL -o "$RUNNER_TEMP/magisk.apk" https://github.com/topjohnwu/Magisk/releases/download/v28.1/Magisk-v28.1.apk
+          unzip -p "$RUNNER_TEMP/magisk.apk" lib/arm64-v8a/libmagiskboot.so > ultra/manager/app/src/main/jniLibs/arm64-v8a/libmagiskboot.so
+          test -s ultra/manager/app/src/main/jniLibs/arm64-v8a/libmagiskboot.so
+          chmod 755 ultra/manager/app/src/main/jniLibs/arm64-v8a/libmagiskboot.so
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -92,8 +116,17 @@ jobs:
           (native / 'libbusybox.so').write_bytes(busybox)
           assets = Path('ultra/manager/app/src/main/assets/modules')
           assets.mkdir(parents=True, exist_ok=True)
-          (assets / 'runtime-info.json').write_text(json.dumps({'apdSha256': hashlib.sha256((native / 'libapd.so').read_bytes()).hexdigest(), 'busyboxSha256': digest}), encoding='utf-8')
+          kpm = Path('ultra/manager/app/src/main/assets/pairing/vr_module_blocker.kpm')
+          info = {
+              'apdSha256': hashlib.sha256((native / 'libapd.so').read_bytes()).hexdigest(),
+              'busyboxSha256': digest,
+              'magiskbootSha256': hashlib.sha256((native / 'libmagiskboot.so').read_bytes()).hexdigest(),
+              'kpmSha256': hashlib.sha256(kpm.read_bytes()).hexdigest(),
+          }
+          (assets / 'runtime-info.json').write_text(json.dumps(info), encoding='utf-8')
           PY
+      - name: 校验 PD2339 适配内容
+        run: python3 .github/tools/verify_pd2339_adaptation.py ultra .github/tools/ultra-paired-anykernel.sh
       - name: 准备稳定构建签名
         env:
           SIGNING_STORE: ${{ secrets.ULTRA_PD2339_KEYSTORE }}
@@ -119,8 +152,9 @@ jobs:
           import hashlib, json, sys, zipfile
           with zipfile.ZipFile(sys.argv[1]) as apk:
               info = json.loads(apk.read('assets/modules/runtime-info.json'))
-              for name in ('apd', 'busybox'):
+              for name in ('apd', 'busybox', 'magiskboot'):
                   assert hashlib.sha256(apk.read(f'lib/arm64-v8a/lib{name}.so')).hexdigest() == info[f'{name}Sha256'], f'Packaged {name} digest mismatch'
+              assert hashlib.sha256(apk.read('assets/pairing/vr_module_blocker.kpm')).hexdigest() == info['kpmSha256'], 'Packaged KPM digest mismatch'
           print('Packaged runtime digests verified')
           PY
           unzip -tq output/Ultra-Paired-AnyKernel3-template.zip

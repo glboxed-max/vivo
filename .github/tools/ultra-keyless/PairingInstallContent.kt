@@ -29,6 +29,7 @@ fun PairingInstallContent(onBack: () -> Unit) {
     var patched by remember { mutableStateOf<File?>(null) }
     var ready by remember { mutableStateOf(PairingSession.ready) }
     var confirmFlash by remember { mutableStateOf(false) }
+    var vivoBlock by remember { mutableStateOf(true) }
 
     fun operation(action: suspend () -> String) {
         if (busy) return
@@ -87,6 +88,11 @@ fun PairingInstallContent(onBack: () -> Unit) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("修补 boot", style = MaterialTheme.typography.titleLarge)
                     Text("选择原厂 boot，修补内核二进制，同时安装 Root 与 KPM 后端。")
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Switch(checked = vivoBlock, onCheckedChange = { vivoBlock = it }, enabled = !busy)
+                        Spacer(Modifier.width(8.dp))
+                        Text("vivo 反 SU（启动时阻止 vr.ko 加载）")
+                    }
                     OutlinedButton(enabled = !busy, onClick = { chooseBoot.launch(arrayOf("*/*")) }) { Text("选择 boot.img") }
                     if (selected != null) Text("已选择 ${selected!!.lastPathSegment}")
                     Button(enabled = !busy && selected != null, onClick = {
@@ -99,7 +105,7 @@ fun PairingInstallContent(onBack: () -> Unit) {
                             context.contentResolver.openInputStream(source)!!.use { input ->
                                 original.outputStream().use { input.copyTo(it) }
                             }
-                            patched = BootPatcher.patch(context, original, directory)
+                            patched = BootPatcher.patch(context, original, directory, vivoBlock)
                             "修补成功，可导出镜像或配套刷入包。请保留原厂 boot。"
                         }
                     }) { Text("修补 boot（Root + KPM）") }
@@ -119,6 +125,7 @@ fun PairingInstallContent(onBack: () -> Unit) {
                     Button(enabled = !busy && ready, onClick = { confirmFlash = true }) { Text("修补并刷入当前槽位") }
                 }
             }
+            InitBootCard()
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (message.isNotEmpty()) Text(message)
         }
@@ -132,8 +139,9 @@ fun PairingInstallContent(onBack: () -> Unit) {
                 confirmFlash = false
                 patched = null
                 operation {
-                    patched = BootPatcher.flashCurrent(context)
-                    "写入和读回校验完成。备份位于 ${patched!!.parent}/original-boot.img，请手动重启。"
+                    val result = BootPatcher.flashCurrent(context, vivoBlock)
+                    patched = result.image
+                    "写入和读回校验完成。原厂 boot/init_boot 备份位于手机 ${result.backup}，请手动重启。"
                 }
             }) { Text("确认刷入") }
         },
