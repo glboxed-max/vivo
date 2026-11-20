@@ -156,7 +156,14 @@ class PairingBootReceiver : BroadcastReceiver() {
                 Intent.ACTION_PACKAGE_REMOVED, Intent.ACTION_PACKAGE_REPLACED, Intent.ACTION_PACKAGE_ADDED)) return
         val pending = goAsync()
         Thread {
-            try { PairingSession.initialize(context) } finally { pending.finish() }
+            try {
+                PairingSession.initialize(context)
+                if (SusfsManager.autoLoad(context)) {
+                    runCatching { PairingSession.rootShell(fresh = true).use { SusfsManager.load(context, it) } }
+                }
+            } finally {
+                pending.finish()
+            }
         }.start()
     }
 }

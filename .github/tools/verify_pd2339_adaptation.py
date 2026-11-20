@@ -33,6 +33,11 @@ cleaner = (backend / "RootManagerCleaner.kt").read_text(encoding="utf-8")
 assert "/data/adb/magisk" in cleaner and "/data/adb/ksu" in cleaner
 assert '"/data/adb/modules" to' not in cleaner and '"/data/adb/ap" to' not in cleaner and '"/data/adb/apd" to' not in cleaner
 assert "RootCleanerCard()" in install
+susfs = (backend / "SusfsManager.kt").read_text(encoding="utf-8")
+assert "susfs_guard_lkm-android14-6.1.ko" in susfs and "/proc/susfs_path" in susfs
+assert "SusfsCard()" in install
+assert (main / "assets/susfs/susfs_guard_lkm-android14-6.1.ko").stat().st_size > 1024 * 1024
+assert (native / "libsusfs_load.so").stat().st_size > 1024
 root = (backend / "RootAccess.kt").read_text(encoding="utf-8")
 assert "createRootShell()" in root and "PairingSession.ready" in root
 cli = (main / "java/com/sukisu/ultra/ui/util/KsuCli.kt").read_text(encoding="utf-8")

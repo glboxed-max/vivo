@@ -62,6 +62,13 @@ jobs:
           zip -qr ../output/Ultra-Paired-AnyKernel3-template.zip . -x '.git/*' '.github/*'
           cd ..
           cp output/Ultra-Paired-AnyKernel3-template.zip ultra/manager/app/src/main/assets/pairing/AnyKernel3-template.zip
+      - name: 准备 SUSFS guard LKM
+        run: |
+          mkdir -p ultra/manager/app/src/main/assets/susfs
+          curl -fL -o components/susfs_guard_lkm-android14-6.1.ko "https://github.com/inforcqb/susfs4ksu-for-lkm/releases/download/v2.3.0-r18.9-1/susfs_guard_lkm-android14-6.1.ko"
+          echo '011a1d3705cdf7dc90b103d0d09ed271982987343f1b4aad168425e10d2b0777  components/susfs_guard_lkm-android14-6.1.ko' | sha256sum -c
+          cp components/susfs_guard_lkm-android14-6.1.ko ultra/manager/app/src/main/assets/susfs/
+          curl -fL -o ultra/manager/app/src/main/assets/susfs/LICENSE "https://raw.githubusercontent.com/inforcqb/susfs4ksu-lkm/main/LICENSE"
       - name: 编译 vivo 反 SU KPM
         run: |
           curl -fL -o "$RUNNER_TEMP/toolchain.tar.xz" https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz
@@ -103,6 +110,8 @@ jobs:
           cargo ndk -t arm64-v8a build --release --locked
           cd ../..
           cp apatch/apd/target/aarch64-linux-android/release/apd ultra/manager/app/src/main/jniLibs/arm64-v8a/libapd.so
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang" -O2 -static -o ultra/manager/app/src/main/jniLibs/arm64-v8a/libsusfs_load.so .github/tools/susfs/susfs_load.c
+          test -s ultra/manager/app/src/main/jniLibs/arm64-v8a/libsusfs_load.so
           gh run download 44482731236 -R glboxed-max/vivo -n PD2339-APatch-manager-debug -D components/apatch-runtime
           python3 - <<'PY'
           from pathlib import Path
@@ -121,7 +130,9 @@ jobs:
               'apdSha256': hashlib.sha256((native / 'libapd.so').read_bytes()).hexdigest(),
               'busyboxSha256': digest,
               'magiskbootSha256': hashlib.sha256((native / 'libmagiskboot.so').read_bytes()).hexdigest(),
+              'susfsLoaderSha256': hashlib.sha256((native / 'libsusfs_load.so').read_bytes()).hexdigest(),
               'kpmSha256': hashlib.sha256(kpm.read_bytes()).hexdigest(),
+              'susfsKoSha256': hashlib.sha256(Path('ultra/manager/app/src/main/assets/susfs/susfs_guard_lkm-android14-6.1.ko').read_bytes()).hexdigest(),
           }
           (assets / 'runtime-info.json').write_text(json.dumps(info), encoding='utf-8')
           PY
@@ -152,9 +163,10 @@ jobs:
           import hashlib, json, sys, zipfile
           with zipfile.ZipFile(sys.argv[1]) as apk:
               info = json.loads(apk.read('assets/modules/runtime-info.json'))
-              for name in ('apd', 'busybox', 'magiskboot'):
-                  assert hashlib.sha256(apk.read(f'lib/arm64-v8a/lib{name}.so')).hexdigest() == info[f'{name}Sha256'], f'Packaged {name} digest mismatch'
+              for name in ('apd', 'busybox', 'magiskboot', 'susfs_load'):
+                  assert hashlib.sha256(apk.read(f'lib/arm64-v8a/lib{name}.so')).hexdigest() == info[f'{name}Sha256'.replace('susfs_load', 'susfsLoader')], f'Packaged {name} digest mismatch'
               assert hashlib.sha256(apk.read('assets/pairing/vr_module_blocker.kpm')).hexdigest() == info['kpmSha256'], 'Packaged KPM digest mismatch'
+              assert hashlib.sha256(apk.read('assets/susfs/susfs_guard_lkm-android14-6.1.ko')).hexdigest() == info['susfsKoSha256'], 'Packaged SUSFS LKM digest mismatch'
           print('Packaged runtime digests verified')
           PY
           unzip -tq output/Ultra-Paired-AnyKernel3-template.zip
