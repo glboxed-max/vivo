@@ -11,6 +11,7 @@ native = main / "jniLibs/arm64-v8a"
 patcher = (backend / "BootPatcher.kt").read_text(encoding="utf-8")
 assert "vr_module_blocker.kpm" in patcher
 assert '"pre-kernel-init"' in patcher and '"-M"' in patcher
+assert '"-N"' not in patcher  # -N aliases the path slot in kptools
 assert "vivoBlock: Boolean = true" in patcher
 assert "PartitionBackup.backup(" in patcher
 

@@ -48,13 +48,19 @@ object BootPatcher {
             context.assets.open("pairing/vr_module_blocker.kpm").use { stream ->
                 kpm.outputStream().use { stream.copyTo(it) }
             }
-            command += listOf("-M", kpm.absolutePath, "-T", "kpm", "-N", "vr_module_blocker", "-V", "pre-kernel-init")
+            // Do not pass -N here: it aliases config->path and makes kptools read the name as a file.
+            command += listOf("-M", kpm.absolutePath, "-T", "kpm", "-V", "pre-kernel-init")
         }
         val process = ProcessBuilder(command)
             .directory(directory).redirectErrorStream(true).redirectOutput(log).start()
         process.outputStream.close()
         val rc = process.waitFor()
-        check(rc == 0 && output.isFile) { "修补失败 ($rc)，请导出日志检查" }
+        if (rc != 0 || !output.isFile) {
+            val tail = runCatching { log.readLines().takeLast(12).joinToString("\n") }.getOrDefault("")
+            val stamp = DownloadStore.stamp()
+            val saved = DownloadStore.save(context, log, "patch-failed-$stamp.log", stamp)
+            error("修补失败 ($rc)。" + (saved?.let { "日志已保存到手机 $it" } ?: "日志：${log.absolutePath}") + "\n$tail")
+        }
         check(hash(original) == before) { "原镜像校验失败" }
         validate(output)
         check(output.length() in 4096L..(original.length() + 1_048_576L)) { "修补后镜像长度异常，停止刷入" }
