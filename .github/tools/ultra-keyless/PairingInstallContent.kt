@@ -96,14 +96,14 @@ fun PairingInstallContent(onBack: () -> Unit) {
     }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ElevatedCard(Modifier.fillMaxWidth()) {
+            LiquidGlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("SukiSU Ultra · 调试版本", style = MaterialTheme.typography.titleLarge)
                     Text(if (ready) "已自动连接 ${PairingSession.versionText()}" else "尚未安装本管理器配对的内核")
                     Text("管理凭证自动生成并由 Android Keystore 加密保存，正常修补和授权无需输入密钥。")
                 }
             }
-            ElevatedCard(Modifier.fillMaxWidth()) {
+            LiquidGlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("修补 boot", style = MaterialTheme.typography.titleLarge)
                     Text("选择原厂 boot，修补内核二进制，同时安装 Root 与 KPM 后端。")
@@ -132,14 +132,14 @@ fun PairingInstallContent(onBack: () -> Unit) {
                     Text("配套包包含已修补镜像及来源摘要，安装时核对当前 boot，无需输入密钥。")
                 }
             }
-            ElevatedCard(Modifier.fillMaxWidth()) {
+            LiquidGlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("直接刷入", style = MaterialTheme.typography.titleLarge)
                     Text("已有本管理器配对的 KernelPatch Root 时，可备份并修补当前槽位 boot 后写回。")
                     Button(enabled = !busy && ready, onClick = { confirmFlash = true }) { Text("修补并刷入当前槽位") }
                 }
             }
-            ElevatedCard(Modifier.fillMaxWidth()) {
+            LiquidGlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("配对备份", style = MaterialTheme.typography.titleLarge)
                     Text("卸载或清除数据会丢失本机配对。请导出加密备份，恢复时才需要备份密码。")

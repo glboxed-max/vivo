@@ -25,6 +25,8 @@ def edit(path, transform):
 
 
 edit(java / 'ui/screen/Home.kt', lambda t: t.replace('                        ContributionCard()\n', '').replace('                        DonateCard()\n', '').replace('                        LearnMoreCard()\n', ''))
+edit(java / 'ui/screen/BottomBarDestination.kt', lambda t: t.replace('KpmScreenDestination, R.string.kpm_title', 'KpmScreenDestination, R.string.kpm_navigation_label'))
+edit(main / 'res/values/strings.xml', lambda t: t.replace('</resources>', '    <string name="kpm_navigation_label">KPM</string>\n</resources>'))
 prefs = 'com.sukisu.ultra.backend.UiPreferences'
 edit(java / 'KernelSUApplication.kt', lambda t: t.replace('ksuApp = this', f'ksuApp = this\n        {prefs}.load(this)').replace('com.sukisu.ultra.backend.PairingSession.initialize(this)', 'com.sukisu.ultra.backend.PairingSession.initialize(this); runCatching { com.sukisu.ultra.backend.ModuleRuntime.probe(this) }'))
 edit(java / 'ui/screen/Settings.kt', lambda t: t.replace('                    // WebUI引擎选择', f'''                    com.sukisu.ultra.ui.component.SwitchItem(

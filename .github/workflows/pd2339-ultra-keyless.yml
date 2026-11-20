@@ -71,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/29.0.14206865
         run: |
-          sdkmanager 'ndk;29.0.14206865' >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;29.0.14206865' >/dev/null
           cargo install cargo-ndk --locked
           cd apatch/apd
           cargo ndk -t arm64-v8a build --release --locked
