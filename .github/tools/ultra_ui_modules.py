@@ -66,7 +66,7 @@ for path in (java / 'ui').rglob('*.kt'):
     path.write_text(text.replace('ElevatedCard(', 'com.sukisu.ultra.backend.LiquidGlassCard('), encoding='utf-8')
 edit(java / 'ui/screen/Module.kt', lambda t: t.replace('fun ModuleScreen(navigator: DestinationsNavigator) {', '''fun ModuleScreen(navigator: DestinationsNavigator) {
     if (!com.sukisu.ultra.backend.ModuleRuntime.installed) {
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
             com.sukisu.ultra.backend.ModuleSetupCard()
         }
         return
@@ -77,6 +77,7 @@ edit(java / 'ui/util/KsuCli.kt', lambda t: body(body(t, 'private fun getKsuDaemo
     check(result.isSuccess) {{ "读取用户态模块失败 (${{result.code}})" }}
     return result.out.joinToString("\\n")'''))
 edit(ultra / 'manager/build.gradle.kts', lambda t: t.replace('extra(3000201)', 'extra(3000202)'))
+edit(ultra / 'manager/app/build.gradle.kts', lambda t: t.replace('useLegacyPackaging = true', 'useLegacyPackaging = true\n            keepDebugSymbols += setOf("**/libapd.so", "**/libbusybox.so")'))
 
 # Root permission ownership remains in Ultra's encrypted, package-pinned vault.
 src = apatch / 'apd/src'
@@ -89,4 +90,5 @@ start, end = text.index('        Commands::Insmod {'), text.index('        Comma
 text = text[:start] + text[end:]
 (src / 'cli.rs').write_text(text, encoding='utf-8')
 edit(src / 'main.rs', lambda t: t.replace('mod insmod;\n', '').replace('mod late_load;\n', '').replace('mod magica;\n', ''))
+edit(src / 'module.rs', lambda t: t.replace('        modules.push(module_prop_map);', '        module_prop_map.insert("dir_id".to_owned(), entry.file_name().to_string_lossy().into_owned());\n        modules.push(module_prop_map);'))
 print('UI preferences, glass backdrop, module navigation and module-only APD applied')

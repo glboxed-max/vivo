@@ -25,7 +25,7 @@ object ModuleRuntime {
         }
         val info = expected(context)
         val actual = PairingSession.rootShell().newJob()
-            .add("sha256sum /data/adb/apd /data/adb/ap/bin/busybox 2>/dev/null").exec()
+            .add("sha256sum /data/adb/apd /data/adb/ap/bin/busybox 2>/dev/null && /data/adb/apd module list >/dev/null").exec()
         installed = actual.isSuccess && actual.out.any { it == info.getString("apdSha256") + "  /data/adb/apd" } &&
             actual.out.any { it == info.getString("busyboxSha256") + "  /data/adb/ap/bin/busybox" }
         return installed
@@ -47,6 +47,8 @@ object ModuleRuntime {
             chmod 700 $backup
             if [ -e /data/adb/apd ]; then cp -p /data/adb/apd $backup/apd; fi
             if [ -e /data/adb/ap/package_config ]; then cp -p /data/adb/ap/package_config $backup/package_config; fi
+            if [ -e /data/adb/ap/su_path ]; then cp -p /data/adb/ap/su_path $backup/su_path; fi
+            cp -a /data/adb/ap/bin $backup/bin
             cp $source /data/adb/apd.ultra-next
             cp $busybox /data/adb/ap/bin/busybox.ultra-next
             cp $tools /data/adb/ap/bin/kptools.ultra-next

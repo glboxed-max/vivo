@@ -66,6 +66,7 @@ jobs:
         with:
           workspaces: apatch/apd
           key: ultra-modules-ndk29-v1
+          cache-on-failure: true
       - name: 编译独立用户态模块后端
         env:
           GH_TOKEN: ${{ github.token }}
@@ -113,6 +114,14 @@ jobs:
           apksigner=$(find "$ANDROID_HOME/build-tools" -path '*/apksigner' | sort -V | tail -1)
           "$apksigner" verify --print-certs "$apk" > output/APK-signature.txt
           unzip -tq "$apk"
+          python3 - "$apk" <<'PY'
+          import hashlib, json, sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as apk:
+              info = json.loads(apk.read('assets/modules/runtime-info.json'))
+              for name in ('apd', 'busybox'):
+                  assert hashlib.sha256(apk.read(f'lib/arm64-v8a/lib{name}.so')).hexdigest() == info[f'{name}Sha256'], f'Packaged {name} digest mismatch'
+          print('Packaged runtime digests verified')
+          PY
           unzip -tq output/Ultra-Paired-AnyKernel3-template.zip
           cd output
           sha256sum *.apk *.zip > SHA256SUMS.txt
