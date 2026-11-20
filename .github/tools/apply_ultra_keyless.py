@@ -31,7 +31,7 @@ for template in templates.glob("*.kt"):
 ap = main / "java/me/bmax/apatch"
 ap.mkdir(parents=True, exist_ok=True)
 native = (args.apatch / "app/src/main/java/me/bmax/apatch/Natives.kt").read_text(encoding="utf-8")
-native = native.replace("APApplication.superKey", "BackendSession.superKey")
+native = native.replace("APApplication.superKey", "BackendSession.protocolMarker")
 native = native.replace("APApplication.DEFAULT_SCONTEXT", '"u:r:su:s0"')
 native = native.replace("import dalvik.annotation.optimization.FastNative\n", "").replace("    @FastNative\n", "")
 assert "APApplication" not in native
@@ -39,18 +39,18 @@ assert "APApplication" not in native
 (ap / "BackendSession.kt").write_text('''package me.bmax.apatch
 
 object BackendSession {
-    @Volatile var superKey: String = ""
+    @Volatile var protocolMarker: String = ""
         private set
     fun connectManager(): Boolean {
         // "su" is a non-secret protocol marker. KernelPatch identifies the caller.
-        superKey = "su"
+        protocolMarker = "su"
         if (!Natives.nativeReady("su") || Natives.kernelPatchModuleNum() < 0) {
             clear()
             return false
         }
         return true
     }
-    fun clear() { superKey = "" }
+    fun clear() { protocolMarker = "" }
 }
 ''', encoding="utf-8")
 cpp = main / "cpp/apatch"
@@ -109,17 +109,17 @@ text = replace_body(text, "fun createRootShell(globalMnt: Boolean = false): Shel
     return Shell.Builder.create().build("/system/bin/sh")''')
 text = replace_body(text, "fun listModules(): String", '    return "[]"')
 for signature, body in (
-    ("fun loadKpmModule(path: String, args: String? = null): String", f'''    check({session}.ready) {{ "内核尚未配对" }}
+    ("fun loadKpmModule(path: String, args: String? = null): String", f'''    check({session}.ready) {{ "未识别到兼容内核" }}
     val rc = {ap_native}.loadKernelPatchModule(path, args.orEmpty())
     return if (rc == 0L) "Success" else "Error: KPM load failed ($rc)"'''),
-    ("fun unloadKpmModule(name: String): String", f'''    check({session}.ready) {{ "内核尚未配对" }}
+    ("fun unloadKpmModule(name: String): String", f'''    check({session}.ready) {{ "未识别到兼容内核" }}
     val rc = {ap_native}.unloadKernelPatchModule(name)
     return if (rc == 0L) "Success" else "Error: KPM unload failed ($rc)"'''),
     ("fun getKpmModuleCount(): Int", f"    return if ({session}.ready) {ap_native}.kernelPatchModuleNum().toInt() else 0"),
     ("fun listKpmModules(): String", f'    return if ({session}.ready) {ap_native}.kernelPatchModuleList() else ""'),
-    ("fun getKpmModuleInfo(name: String): String", f'''    check({session}.ready) {{ "内核尚未配对" }}
+    ("fun getKpmModuleInfo(name: String): String", f'''    check({session}.ready) {{ "未识别到兼容内核" }}
     return {ap_native}.kernelPatchModuleInfo(name)'''),
-    ("fun controlKpmModule(name: String, args: String? = null): Int", f'''    check({session}.ready) {{ "内核尚未配对" }}
+    ("fun controlKpmModule(name: String, args: String? = null): Int", f'''    check({session}.ready) {{ "未识别到兼容内核" }}
     return {ap_native}.kernelPatchModuleControl(name, args.orEmpty()).rc.toInt()'''),
     ("fun getKpmVersion(): String", f'    return if ({session}.ready) {session}.versionText() else ""'),
 ):

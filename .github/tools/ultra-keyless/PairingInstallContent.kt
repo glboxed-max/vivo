@@ -66,7 +66,7 @@ fun PairingInstallContent(onBack: () -> Unit) {
             context.contentResolver.openOutputStream(uri, "w")!!.use { output ->
                 BootPatcher.exportInstaller(context, image, output)
             }
-            "已导出与本管理器配对的 AnyKernel3 包"
+            "已导出配套 AnyKernel3 包"
         }
     }
     Scaffold(topBar = {

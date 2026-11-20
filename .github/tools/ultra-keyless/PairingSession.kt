@@ -15,7 +15,7 @@ object PairingSession {
     private var cachedShell: Shell? = null
     @Volatile var error: String? = null
         private set
-    val ready: Boolean get() = BackendSession.superKey.isNotEmpty()
+    val ready: Boolean get() = BackendSession.protocolMarker.isNotEmpty()
 
     @Synchronized
     fun initialize(context: Context) {
@@ -27,7 +27,7 @@ object PairingSession {
             BackendSession.connectManager()
         } catch (failure: Exception) {
             BackendSession.clear()
-            error = failure.message ?: "读取配对数据失败"
+            error = failure.message ?: "读取授权记录失败"
         }
         if (ready) {
             try { restoreGrants() } catch (failure: Exception) {
@@ -40,7 +40,7 @@ object PairingSession {
 
     fun versionText(): String {
         val number = version()
-        return if (number > 0) "KernelPatch v${number shr 16}.${(number shr 8) and 255}.${number and 255}" else "未配对内核"
+        return if (number > 0) "KernelPatch v${number shr 16}.${(number shr 8) and 255}.${number and 255}" else "未识别到兼容内核"
     }
 
     fun profile(packageName: String?, uid: Int): Profile {
