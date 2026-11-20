@@ -136,6 +136,7 @@ fun PairingInstallContent(onBack: () -> Unit) {
                 }
             }
             InitBootCard()
+            RootCleanerCard()
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (message.isNotEmpty()) Text(message)
         }

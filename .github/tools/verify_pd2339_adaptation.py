@@ -29,6 +29,10 @@ assert "backupLivePartitions" in download
 
 assert "RootAccess.acquire(" in (backend / "BootPatcher.kt").read_text(encoding="utf-8")
 assert "RootAccess.acquire(" in (backend / "InitBootContent.kt").read_text(encoding="utf-8")
+cleaner = (backend / "RootManagerCleaner.kt").read_text(encoding="utf-8")
+assert "/data/adb/magisk" in cleaner and "/data/adb/ksu" in cleaner
+assert '"/data/adb/modules" to' not in cleaner and '"/data/adb/ap" to' not in cleaner and '"/data/adb/apd" to' not in cleaner
+assert "RootCleanerCard()" in install
 root = (backend / "RootAccess.kt").read_text(encoding="utf-8")
 assert "createRootShell()" in root and "PairingSession.ready" in root
 cli = (main / "java/com/sukisu/ultra/ui/util/KsuCli.kt").read_text(encoding="utf-8")
