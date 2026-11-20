@@ -100,13 +100,23 @@ fun PairingInstallContent(onBack: () -> Unit) {
                         patched = null
                         operation {
                             PairingSession.initialize(context)
+                            val stamp = DownloadStore.stamp()
+                            val backup = DownloadStore.backupLivePartitions()
                             val directory = File(context.filesDir, "patches/${java.util.UUID.randomUUID()}").apply { check(mkdirs()) }
                             val original = File(directory, "original-boot.img")
                             context.contentResolver.openInputStream(source)!!.use { input ->
                                 original.outputStream().use { input.copyTo(it) }
                             }
-                            patched = BootPatcher.patch(context, original, directory, vivoBlock)
-                            "修补成功，可导出镜像或配套刷入包。请保留原厂 boot。"
+                            val image = BootPatcher.patch(context, original, directory, vivoBlock)
+                            patched = image
+                            val exported = DownloadStore.save(context, image, "boot-patched-$stamp.img", stamp)
+                            buildString {
+                                append("修补完成。")
+                                append(if (exported != null) "已输出到手机 $exported。"
+                                else "未能写入 Download，请用“导出修补镜像”。")
+                                append(if (backup != null) "当前 boot/init_boot 已备份到 $backup。"
+                                else "未取得 Root，未备份当前分区。")
+                            }
                         }
                     }) { Text("修补 boot（Root + KPM）") }
                     OutlinedButton(enabled = !busy && patched != null, onClick = { saveBoot.launch("Ultra-Paired-boot.img") }) {

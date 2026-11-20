@@ -18,6 +18,16 @@ install = (backend / "PairingInstallContent.kt").read_text(encoding="utf-8")
 assert "var vivoBlock by remember { mutableStateOf(true) }" in install
 assert "InitBootCard()" in install
 assert "BootPatcher.patch(context, original, directory, vivoBlock)" in install
+assert "DownloadStore.save(context, image, \"boot-patched-$stamp.img\", stamp)" in install
+assert "DownloadStore.backupLivePartitions()" in install
+
+download = (backend / "DownloadStore.kt").read_text(encoding="utf-8")
+assert 'FOLDER = "西努鲁"' in download
+assert "MediaStore.Downloads.EXTERNAL_CONTENT_URI" in download
+assert "backupLivePartitions" in download
+
+manifest = (main / "AndroidManifest.xml").read_text(encoding="utf-8")
+assert 'android.permission.WRITE_EXTERNAL_STORAGE' in manifest
 
 backup = (backend / "PartitionBackup.kt").read_text(encoding="utf-8")
 assert "Download/西努鲁" in backup
