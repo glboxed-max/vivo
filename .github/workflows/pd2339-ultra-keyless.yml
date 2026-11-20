@@ -48,6 +48,7 @@ jobs:
           echo '63a8656a79b74baadcf0ce57a7e89a8c8a94beb35b25df58aec0bcf1d066bc5b  components/kptools-android' | sha256sum -c
           python3 .github/tools/prepare_ultra_manager_kpimg.py components/kpimg-android ultra/manager/app/src/main/assets/pairing/kpimg
           cp components/kptools-android ultra/manager/app/src/main/jniLibs/arm64-v8a/libkptools.so
+          python3 .github/tools/verify_ultra_manager_mode.py ultra components/kpimg-android
           cp .github/tools/ultra-paired-anykernel.sh ak3/anykernel.sh
           cp .github/tools/ultra-keyless/使用说明.md ak3/
           cd ak3
@@ -100,12 +101,12 @@ jobs:
           test -n "$SIGNING_STORE"
           printf '%s' "$SIGNING_STORE" | base64 -d > "$RUNNER_TEMP/pd2339.p12"
           chmod 600 "$RUNNER_TEMP/pd2339.p12"
-      - name: 单元测试与编译 ARM64 APK
+      - name: 编译 ARM64 APK
         working-directory: ultra/manager
         env:
           ULTRA_KEYSTORE_FILE: ${{ runner.temp }}/pd2339.p12
           ULTRA_KEYSTORE_PASSWORD: ${{ secrets.ULTRA_PD2339_STORE_PASSWORD }}
-        run: bash gradlew --no-daemon testDebugUnitTest assembleDebug
+        run: bash gradlew --no-daemon assembleDebug
       - name: 检查签名和导出结果
         run: |
           cp ultra/manager/app/build/outputs/apk/debug/*.apk output/

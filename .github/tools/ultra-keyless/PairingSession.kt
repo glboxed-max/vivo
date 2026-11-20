@@ -19,20 +19,20 @@ object PairingSession {
 
     @Synchronized
     fun initialize(context: Context) {
+        BackendSession.clear()
+        error = null
         try {
-            if (!::vault.isInitialized) vault = PairingVault(context.applicationContext)
-            BackendSession.clear()
-            vault.read()
-            error = null
             BackendSession.connectManager()
         } catch (failure: Exception) {
             BackendSession.clear()
-            error = failure.message ?: "读取授权记录失败"
+            error = failure.message ?: "连接内核失败"
         }
-        if (ready) {
-            try { restoreGrants() } catch (failure: Exception) {
-                error = failure.message ?: "恢复授权失败"
-            }
+        try {
+            if (!::vault.isInitialized) vault = PairingVault(context.applicationContext)
+            vault.read()
+            if (ready) restoreGrants()
+        } catch (failure: Exception) {
+            error = failure.message ?: "读取授权记录失败"
         }
     }
 
