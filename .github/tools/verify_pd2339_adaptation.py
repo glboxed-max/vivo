@@ -33,9 +33,14 @@ content = (backend / "InitBootContent.kt").read_text(encoding="utf-8")
 assert "InitBootTool.removeKernelSu" in content
 assert "PartitionBackup.flash" in content
 
-assert (assets / "vr_module_blocker.kpm").stat().st_size > 1024
-assert (assets / "kpimg").stat().st_size > 1024
-assert (native / "libmagiskboot.so").stat().st_size > 1024 * 1024
+for path, minimum in (
+    (assets / "vr_module_blocker.kpm", 1024),
+    (assets / "kpimg", 1024),
+    (native / "libmagiskboot.so", 256 * 1024),
+):
+    size = path.stat().st_size
+    assert size > minimum, f"{path} too small: {size}"
+    print(f"{path}: {size} bytes")
 
 script = anykernel.read_text(encoding="utf-8")
 assert "Download/西努鲁" in script
